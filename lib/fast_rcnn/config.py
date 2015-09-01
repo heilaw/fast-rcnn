@@ -27,6 +27,9 @@ __C = edict()
 #   from fast_rcnn_config import cfg
 cfg = __C
 
+# This is for the hico experiment
+__C.FLAG_HICO = False
+
 #
 # Training options
 #

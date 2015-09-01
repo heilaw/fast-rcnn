@@ -13,10 +13,12 @@ import numpy as np
 import scipy.sparse
 import datasets
 
+import fnmatch
+
 class imdb(object):
     """Image database."""
 
-    def __init__(self, name):
+    def __init__(self, name, flag_hico=False):
         self._name = name
         self._num_classes = 0
         self._classes = []
@@ -26,6 +28,7 @@ class imdb(object):
         self._roidb_handler = self.default_roidb
         # Use this dict for storing dataset specific config options
         self.config = {}
+        self._flag_hico = flag_hico
 
     @property
     def name(self):
@@ -62,6 +65,10 @@ class imdb(object):
             return self._roidb
         self._roidb = self.roidb_handler()
         return self._roidb
+
+    @property
+    def flag_hico(self):
+        return self._flag_hico
 
     @property
     def cache_path(self):
@@ -102,10 +109,16 @@ class imdb(object):
             boxes[:, 0] = widths[i] - oldx2 - 1
             boxes[:, 2] = widths[i] - oldx1 - 1
             assert (boxes[:, 2] >= boxes[:, 0]).all()
-            entry = {'boxes' : boxes,
-                     'gt_overlaps' : self.roidb[i]['gt_overlaps'],
-                     'gt_classes' : self.roidb[i]['gt_classes'],
-                     'flipped' : True}
+            if self._flag_hico:
+                entry = {'index' : self.roidb[i]['index'],  # TODO: drop this later
+                         'boxes' : boxes,
+                         'label' : self.roidb[i]['label'],
+                         'flipped' : True}
+            else:
+                entry = {'boxes' : boxes,
+                         'gt_overlaps' : self.roidb[i]['gt_overlaps'],
+                         'gt_classes' : self.roidb[i]['gt_classes'],
+                         'flipped' : True}
             self.roidb.append(entry)
         self._image_index = self._image_index * 2
 
@@ -170,6 +183,7 @@ class imdb(object):
                 overlaps[I, gt_classes[argmaxes[I]]] = maxes[I]
 
             overlaps = scipy.sparse.csr_matrix(overlaps)
+            
             roidb.append({'boxes' : boxes,
                           'gt_classes' : np.zeros((num_boxes,),
                                                   dtype=np.int32),

@@ -12,6 +12,7 @@
 import _init_paths
 from fast_rcnn.test import test_net
 from fast_rcnn.config import cfg, cfg_from_file
+from fast_rcnn.test_hico import test_net_hico
 from datasets.factory import get_imdb
 import caffe
 import argparse
@@ -41,6 +42,9 @@ def parse_args():
                         default='voc_2007_test', type=str)
     parser.add_argument('--comp', dest='comp_mode', help='competition mode',
                         action='store_true')
+    parser.add_argument('--feat', dest='feat_root',
+                        help='fc7 feature cache dir',
+                        default=None, type=str)
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -71,6 +75,6 @@ if __name__ == '__main__':
     net.name = os.path.splitext(os.path.basename(args.caffemodel))[0]
 
     imdb = get_imdb(args.imdb_name)
-    imdb.competition_mode(args.comp_mode)
+    # imdb.competition_mode(args.comp_mode)
 
-    test_net(net, imdb)
+    test_net_hico(net, imdb, args.feat_root)

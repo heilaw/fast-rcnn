@@ -10,6 +10,7 @@
 __sets = {}
 
 import datasets.pascal_voc
+import datasets.im_horse
 import numpy as np
 
 def _selective_search_IJCV_top_k(split, year, top_k):
@@ -36,6 +37,13 @@ for top_k in np.arange(1000, 11000, 1000):
             name = 'voc_{}_{}_top_{:d}'.format(year, split, top_k)
             __sets[name] = (lambda split=split, year=year, top_k=top_k:
                     _selective_search_IJCV_top_k(split, year, top_k))
+
+# Set up im_horse using selective search "fast" mode
+hico_set = ['train2015_single', 'train2015', 'test2015']
+for image_set in hico_set:
+    name = 'im_horse_{}'.format(image_set)
+    __sets[name] = (lambda image_set=image_set:
+                    datasets.im_horse(image_set))
 
 def get_imdb(name):
     """Get an imdb (image database) by name."""

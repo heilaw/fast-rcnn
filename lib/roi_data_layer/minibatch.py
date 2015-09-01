@@ -25,6 +25,12 @@ def get_minibatch(roidb, num_classes):
     rois_per_image = cfg.TRAIN.BATCH_SIZE / num_images
     fg_rois_per_image = np.round(cfg.TRAIN.FG_FRACTION * rois_per_image)
 
+    if cfg.FLAG_HICO:
+        assert(not cfg.TRAIN.BBOX_REG)
+        assert(cfg.TRAIN.FG_FRACTION == 1)
+        assert(cfg.TRAIN.BATCH_SIZE == num_images)
+        assert(cfg.TRAIN.BATCH_SIZE == cfg.TRAIN.BATCH_SIZE)
+
     # Get the input image blob, formatted for caffe
     im_blob, im_scales = _get_image_blob(roidb, random_scale_inds)
 
@@ -35,9 +41,15 @@ def get_minibatch(roidb, num_classes):
     bbox_loss_blob = np.zeros(bbox_targets_blob.shape, dtype=np.float32)
     # all_overlaps = []
     for im_i in xrange(num_images):
-        labels, overlaps, im_rois, bbox_targets, bbox_loss \
-            = _sample_rois(roidb[im_i], fg_rois_per_image, rois_per_image,
-                           num_classes)
+        if not cfg.FLAG_HICO:
+            labels, overlaps, im_rois, bbox_targets, bbox_loss \
+                = _sample_rois(roidb[im_i], fg_rois_per_image, rois_per_image,
+                               num_classes)
+        else:
+            im_rois = roidb[im_i]['boxes'][0:1,:]
+            labels  = roidb[im_i]['label'][0:1]
+            bbox_targets = np.zeros((im_rois.shape[0], 4 * num_classes), dtype=np.float32)
+            bbox_loss = np.zeros(bbox_targets.shape, dtype=np.float32)
 
         # Add to RoIs blob
         rois = _project_im_rois(im_rois, im_scales[im_i])

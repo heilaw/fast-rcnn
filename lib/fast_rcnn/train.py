@@ -28,10 +28,11 @@ class SolverWrapper(object):
         """Initialize the SolverWrapper."""
         self.output_dir = output_dir
 
-        print 'Computing bounding-box regression targets...'
-        self.bbox_means, self.bbox_stds = \
-                rdl_roidb.add_bbox_regression_targets(roidb)
-        print 'done'
+        if not cfg.FLAG_HICO:
+            print 'Computing bounding-box regression targets...'
+            self.bbox_means, self.bbox_stds = \
+                    rdl_roidb.add_bbox_regression_targets(roidb)
+            print 'done'
 
         self.solver = caffe.SGDSolver(solver_prototxt)
         if pretrained_model is not None:

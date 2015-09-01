@@ -76,6 +76,11 @@ if __name__ == '__main__':
         caffe.set_device(args.gpu_id)
 
     imdb = get_imdb(args.imdb_name)
+    assert(imdb.flag_hico == cfg.FLAG_HICO)
+    # TODO: just to handle single case now; this can be dropped later
+    if imdb.flag_hico:
+        print 'get roidb after imdb initialize; just to handle single label'
+        dummy = imdb.roidb
     print 'Loaded dataset `{:s}` for training'.format(imdb.name)
     roidb = get_training_roidb(imdb)
 

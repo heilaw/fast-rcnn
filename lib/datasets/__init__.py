@@ -7,6 +7,7 @@
 
 from .imdb import imdb
 from .pascal_voc import pascal_voc
+from .im_horse import im_horse
 from . import factory
 
 import os.path as osp

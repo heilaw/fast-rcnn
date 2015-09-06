@@ -91,6 +91,20 @@ class RoIDataLayer(caffe.Layer):
         # classes plus background
         top[2].reshape(1)
 
+        # for TOP_K > 1
+        if cfg.TOP_K > 1:
+            # does not suppoart bbox regression
+            assert(cfg.TRAIN.BBOX_REG == False)
+            for ind in xrange(1,cfg.TOP_K):
+                # change _name_to_top_map
+                key = 'rois_%d' % (ind+1)
+                self._name_to_top_map[key] = ind+1
+                # reshape
+                top[ind+1].reshape(1, 3, 100, 100)
+            # fix labels
+            self._name_to_top_map['labels'] = cfg.TOP_K+1
+            top[cfg.TOP_K+1].reshape(1)
+
         if cfg.TRAIN.BBOX_REG:
             self._name_to_top_map['bbox_targets'] = 3
             self._name_to_top_map['bbox_loss_weights'] = 4

@@ -30,6 +30,9 @@ cfg = __C
 # This is for the hico experiment
 __C.FLAG_HICO = False
 
+# top K detection boxes
+__C.TOP_K = 1
+
 #
 # Training options
 #

@@ -35,27 +35,32 @@ def get_minibatch(roidb, num_classes):
     im_blob, im_scales = _get_image_blob(roidb, random_scale_inds)
 
     # Now, build the region of interest and label blobs
-    rois_blob = np.zeros((0, 5), dtype=np.float32)
+    rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K
     labels_blob = np.zeros((0), dtype=np.float32)
     bbox_targets_blob = np.zeros((0, 4 * num_classes), dtype=np.float32)
     bbox_loss_blob = np.zeros(bbox_targets_blob.shape, dtype=np.float32)
     # all_overlaps = []
     for im_i in xrange(num_images):
+        im_rois = [0] * cfg.TOP_K
         if not cfg.FLAG_HICO:
-            labels, overlaps, im_rois, bbox_targets, bbox_loss \
+            assert(cfg.TOP_K == 1)
+            labels, overlaps, im_rois[0], bbox_targets, bbox_loss \
                 = _sample_rois(roidb[im_i], fg_rois_per_image, rois_per_image,
                                num_classes)
         else:
-            im_rois = roidb[im_i]['boxes'][0:1,:]
+            for ind in xrange(cfg.TOP_K):
+                # 'boxes' are sorted by detection scores already
+                im_rois[ind] = roidb[im_i]['boxes'][ind:ind+1,:]
             labels  = roidb[im_i]['label'][0:1]
-            bbox_targets = np.zeros((im_rois.shape[0], 4 * num_classes), dtype=np.float32)
+            bbox_targets = np.zeros((0, 4 * num_classes), dtype=np.float32)
             bbox_loss = np.zeros(bbox_targets.shape, dtype=np.float32)
 
         # Add to RoIs blob
-        rois = _project_im_rois(im_rois, im_scales[im_i])
-        batch_ind = im_i * np.ones((rois.shape[0], 1))
-        rois_blob_this_image = np.hstack((batch_ind, rois))
-        rois_blob = np.vstack((rois_blob, rois_blob_this_image))
+        for ind in xrange(cfg.TOP_K):
+            rois = _project_im_rois(im_rois[ind], im_scales[im_i])
+            batch_ind = im_i * np.ones((rois.shape[0], 1))
+            rois_blob_this_image = np.hstack((batch_ind, rois))
+            rois_blob[ind] = np.vstack((rois_blob[ind], rois_blob_this_image))
 
         # Add to labels, bbox targets, and bbox loss blobs
         labels_blob = np.hstack((labels_blob, labels))
@@ -67,8 +72,14 @@ def get_minibatch(roidb, num_classes):
     # _vis_minibatch(im_blob, rois_blob, labels_blob, all_overlaps)
 
     blobs = {'data': im_blob,
-             'rois': rois_blob,
+             'rois': rois_blob[0],
              'labels': labels_blob}
+
+    # for TOP_K > 1
+    if cfg.TOP_K > 1:
+        for ind in xrange(1,cfg.TOP_K):
+            key = 'rois_%s' % (ind+1)
+            blobs[key] = rois_blob[ind]
 
     if cfg.TRAIN.BBOX_REG:
         blobs['bbox_targets'] = bbox_targets_blob

@@ -13,6 +13,8 @@ import datasets.pascal_voc
 import datasets.im_horse
 import numpy as np
 
+from fast_rcnn.config import cfg
+
 def _selective_search_IJCV_top_k(split, year, top_k):
     """Return an imdb that uses the top k proposals from the selective search
     IJCV code.
@@ -43,7 +45,7 @@ hico_set = ['train2015_single', 'train2015', 'test2015']
 for image_set in hico_set:
     name = 'im_horse_{}'.format(image_set)
     __sets[name] = (lambda image_set=image_set:
-                    datasets.im_horse(image_set))
+                    datasets.im_horse(image_set, cfg.ROOT_DIR))
 
 def get_imdb(name):
     """Get an imdb (image database) by name."""

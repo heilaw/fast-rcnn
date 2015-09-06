@@ -15,20 +15,24 @@ import utils.cython_bbox
 import cPickle
 import subprocess
 
+import os.path as osp
+
 class im_horse(datasets.imdb):
-    def __init__(self, image_set):
+    def __init__(self, image_set, root_dir):
         if image_set == 'train2015_single':
             image_set_org = 'train2015'
         else:
             image_set_org = image_set
         datasets.imdb.__init__(self, 'im_horse_' + image_set, True)
         self._image_set = image_set
-        # self._devkit_path = self._get_default_path() if devkit_path is None \
-        #                     else devkit_path
-        # self._data_path = os.path.join(self._devkit_path, 'VOC' + self._year)
-        self._data_path = '/z/ywchao/codes/object_patch/subset_exp/im_horse/' + image_set_org
-        self._det_path = '/z/ywchao/codes/object_patch/subset_exp/res_det/' + image_set_org
-        self._anno_file = '/z/ywchao/codes/object_patch/subset_exp/anno_horse_640.mat'
+        # Set cache root
+        self._cache_root = osp.abspath(osp.join(root_dir, 'data', 'cache'))
+        if not os.path.exists(self._cache_root):
+            os.makedirs(self._cache_root)
+        # Set input paths and files
+        self._data_path = './caches/im_base/horse/' + image_set_org
+        self._det_path = './caches/det_base/horse/' + image_set_org
+        self._anno_file = './caches/anno_base/anno_horse_640.mat'
         self._classes = ('feed', 
                          'groom',
                          'hold',
@@ -98,7 +102,7 @@ class im_horse(datasets.imdb):
 
         This function loads/saves from/to a cache file to speed up future calls.
         """
-        cache_file = os.path.join(self.cache_path,
+        cache_file = os.path.join(self._cache_root,
                                   self.name + '_selective_search_roidb.pkl')
 
         if os.path.exists(cache_file):
@@ -175,7 +179,6 @@ class im_horse(datasets.imdb):
     def _load_detection(self, index, anno, lsim):
         # ------- params to be changed later ----------------------------------
         nid = 18  # horse
-        top_K = 1        
         # ---------------------------------------------------------------------
          
         # Load detection file
@@ -185,11 +188,11 @@ class im_horse(datasets.imdb):
                'Detection file not found at: {}'.format(filename)
         res = sio.loadmat(filename)['res']
         dets = res['dets'][0,0][0,nid]
-        # NMS
+        # NMS: 'keep' will also sort the dets by detection scores
         keep = np.squeeze(res['keep'][0,0][0,nid])
         dets = dets[keep,:]
-        # Pick top K. dets is already sorted by scores
-        boxes = dets[np.arange(top_K),0:4]
+        # Keep all the detection boxes now and filter later in data fetching
+        boxes = dets[:,0:4]
         boxes = np.around(boxes).astype('uint16')        
         # Get image index
         ind = [idx for idx, im in enumerate(lsim) if str(im[0][0]) == index]

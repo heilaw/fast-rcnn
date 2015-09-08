@@ -30,8 +30,13 @@ cfg = __C
 # This is for the hico experiment
 __C.FLAG_HICO = False
 
-# top K detection boxes
+# top K detection boxes (only for FLAG_HICO = True)
 __C.TOP_K = 1
+
+# region feature type (only for FLAG_HICO = True)
+#    0: feature from the tight box
+#    4: feature from window centered at 4 sides of the box
+__C.FEAT_TYPE = 0
 
 #
 # Training options

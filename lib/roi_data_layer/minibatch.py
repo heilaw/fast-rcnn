@@ -32,31 +32,48 @@ def get_minibatch(roidb, num_classes):
         assert(cfg.TRAIN.BATCH_SIZE == cfg.TRAIN.BATCH_SIZE)
 
     # Get the input image blob, formatted for caffe
-    im_blob, im_scales = _get_image_blob(roidb, random_scale_inds)
+    #   w_org/h_org: image width/height in the original scale; for the 4-side
+    #                context feature
+    im_blob, im_scales, w_org, h_org = _get_image_blob(roidb, random_scale_inds)
 
     # Now, build the region of interest and label blobs
-    rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K
+    if cfg.FEAT_TYPE == 4:
+        # 4-side context feature
+        rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K * 4
+    else:
+        rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K
     labels_blob = np.zeros((0), dtype=np.float32)
     bbox_targets_blob = np.zeros((0, 4 * num_classes), dtype=np.float32)
     bbox_loss_blob = np.zeros(bbox_targets_blob.shape, dtype=np.float32)
     # all_overlaps = []
     for im_i in xrange(num_images):
         im_rois = [0] * cfg.TOP_K
+        if cfg.FEAT_TYPE == 4:
+            im_rois = im_rois * 4
         if not cfg.FLAG_HICO:
-            assert(cfg.TOP_K == 1)
+            assert(cfg.TOP_K == 1 and cfg.FEAT_TYPE == 0)
             labels, overlaps, im_rois[0], bbox_targets, bbox_loss \
                 = _sample_rois(roidb[im_i], fg_rois_per_image, rois_per_image,
                                num_classes)
         else:
             for ind in xrange(cfg.TOP_K):
                 # 'boxes' are sorted by detection scores already
-                im_rois[ind] = roidb[im_i]['boxes'][ind:ind+1,:]
+                if cfg.FEAT_TYPE == 4:
+                     # get 4 side boxes
+                     im_rois[ind*4+0], im_rois[ind*4+1], \
+                     im_rois[ind*4+2], im_rois[ind*4+3], \
+                         = _get_4_side_bbox(roidb[im_i]['boxes'][ind,:], 
+                                            w_org[im_i], 
+                                            h_org[im_i])
+                else:
+                    # get tight bbox
+                    im_rois[ind] = roidb[im_i]['boxes'][ind:ind+1,:]
             labels  = roidb[im_i]['label'][0:1]
             bbox_targets = np.zeros((0, 4 * num_classes), dtype=np.float32)
             bbox_loss = np.zeros(bbox_targets.shape, dtype=np.float32)
 
         # Add to RoIs blob
-        for ind in xrange(cfg.TOP_K):
+        for ind in xrange(len(im_rois)):
             rois = _project_im_rois(im_rois[ind], im_scales[im_i])
             batch_ind = im_i * np.ones((rois.shape[0], 1))
             rois_blob_this_image = np.hstack((batch_ind, rois))
@@ -75,11 +92,22 @@ def get_minibatch(roidb, num_classes):
              'rois': rois_blob[0],
              'labels': labels_blob}
 
-    # for TOP_K > 1
-    if cfg.TOP_K > 1:
-        for ind in xrange(1,cfg.TOP_K):
-            key = 'rois_%s' % (ind+1)
-            blobs[key] = rois_blob[ind]
+    # for HICO experiments
+    if cfg.FLAG_HICO:
+        # does not suppoart bbox regression
+        assert(cfg.TRAIN.BBOX_REG == False)
+        blobs = {'data': im_blob,
+                 'labels': labels_blob}
+        for ind in xrange(cfg.TOP_K):
+            if cfg.FEAT_TYPE == 4:
+                for i, s in enumerate(['l','t','r','b']):
+                    # change _name_to_top_map
+                    key = 'rois_%d_%s' % (ind+1,s)
+                    blobs[key] = rois_blob[ind*4+i]
+            else:
+                # change _name_to_top_map
+                key = 'rois_%d' % (ind+1)
+                blobs[key] = rois_blob[ind]
 
     if cfg.TRAIN.BBOX_REG:
         blobs['bbox_targets'] = bbox_targets_blob
@@ -134,6 +162,37 @@ def _sample_rois(roidb, fg_rois_per_image, rois_per_image, num_classes):
 
     return labels, overlaps, rois, bbox_targets, bbox_loss_weights
 
+def _get_4_side_bbox(bbox, im_width, im_height):
+    assert(bbox.ndim == 1 and bbox.shape[0] == 4)
+    # get radius
+    w = bbox[2]-bbox[0]+1;
+    h = bbox[3]-bbox[1]+1;
+    r = (w+h)/2;
+    # get boxes
+    bbox_l = np.array([np.maximum(bbox[0]-0.5*r,1),
+                       bbox[1],
+                       bbox[2]-0.5*w,
+                       bbox[3]])
+    bbox_t = np.array([bbox[0],
+                       np.maximum(bbox[1]-0.5*h,1),
+                       bbox[2],
+                       bbox[3]-0.5*h])
+    bbox_r = np.array([bbox[0]+0.5*w,
+                       bbox[1],
+                       np.minimum(bbox[2]+0.5*r,im_width),
+                       bbox[3]])
+    bbox_b = np.array([bbox[0],
+                       bbox[1]+0.5*h,
+                       bbox[2],
+                       np.minimum(bbox[3]+0.5*h,im_height)])
+    # bbox_l = np.around(bbox_l).astype('uint16')
+    # bbox_t = np.around(bbox_t).astype('uint16')
+    # bbox_r = np.around(bbox_r).astype('uint16')
+    # bbox_b = np.around(bbox_b).astype('uint16')
+
+    # return in the order left, top, right, bottom
+    return bbox_l[None,:], bbox_t[None,:], bbox_r[None,:], bbox_b[None,:]
+
 def _get_image_blob(roidb, scale_inds):
     """Builds an input blob from the images in the roidb at the specified
     scales.
@@ -141,8 +200,13 @@ def _get_image_blob(roidb, scale_inds):
     num_images = len(roidb)
     processed_ims = []
     im_scales = []
+    w_org = []
+    h_org = []
     for i in xrange(num_images):
         im = cv2.imread(roidb[i]['image'])
+        # get width and height in the original scale
+        w_org.append(im.shape[1])
+        h_org.append(im.shape[0])
         if roidb[i]['flipped']:
             im = im[:, ::-1, :]
         target_size = cfg.TRAIN.SCALES[scale_inds[i]]
@@ -154,7 +218,7 @@ def _get_image_blob(roidb, scale_inds):
     # Create a blob to hold the input images
     blob = im_list_to_blob(processed_ims)
 
-    return blob, im_scales
+    return blob, im_scales, w_org, h_org
 
 def _project_im_rois(im_rois, im_scale_factor):
     """Project image RoIs into the rescaled training image."""

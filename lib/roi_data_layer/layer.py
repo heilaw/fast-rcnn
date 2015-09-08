@@ -91,19 +91,29 @@ class RoIDataLayer(caffe.Layer):
         # classes plus background
         top[2].reshape(1)
 
-        # for TOP_K > 1
-        if cfg.TOP_K > 1:
+        # for HICO experiments
+        if cfg.FLAG_HICO:
             # does not suppoart bbox regression
             assert(cfg.TRAIN.BBOX_REG == False)
-            for ind in xrange(1,cfg.TOP_K):
-                # change _name_to_top_map
-                key = 'rois_%d' % (ind+1)
-                self._name_to_top_map[key] = ind+1
-                # reshape
-                top[ind+1].reshape(1, 3, 100, 100)
+            self._name_to_top_map = {'data': 0}
+            for ind in xrange(0,cfg.TOP_K):
+                if cfg.FEAT_TYPE == 4:
+                    for i, s in enumerate(['l','t','r','b']):
+                        # change _name_to_top_map
+                        key = 'rois_%d_%s' % (ind+1,s)
+                        self._name_to_top_map[key] = ind*4+(i+1)
+                        # reshape
+                        top[ind*4+(i+1)].reshape(1, 5)
+                else:
+                    # change _name_to_top_map
+                    key = 'rois_%d' % (ind+1)
+                    self._name_to_top_map[key] = ind*4+1
+                    # reshape
+                    top[ind*4+1].reshape(1, 5)
             # fix labels
-            self._name_to_top_map['labels'] = cfg.TOP_K+1
-            top[cfg.TOP_K+1].reshape(1)
+            ind = len(self._name_to_top_map.keys())
+            self._name_to_top_map['labels'] = ind
+            top[ind].reshape(1)
 
         if cfg.TRAIN.BBOX_REG:
             self._name_to_top_map['bbox_targets'] = 3

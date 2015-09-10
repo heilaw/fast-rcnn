@@ -88,12 +88,12 @@ def get_minibatch(roidb, num_classes):
     # For debug visualizations
     # _vis_minibatch(im_blob, rois_blob, labels_blob, all_overlaps)
 
-    blobs = {'data': im_blob,
-             'rois': rois_blob[0],
-             'labels': labels_blob}
-
     # for HICO experiments
-    if cfg.FLAG_HICO:
+    if not cfg.FLAG_HICO:
+        blobs = {'data': im_blob,
+                'rois': rois_blob[0],
+                'labels': labels_blob}
+    else:
         # does not suppoart bbox regression
         assert(cfg.TRAIN.BBOX_REG == False)
         blobs = {'data': im_blob,
@@ -101,11 +101,9 @@ def get_minibatch(roidb, num_classes):
         for ind in xrange(cfg.TOP_K):
             if cfg.FEAT_TYPE == 4:
                 for i, s in enumerate(['l','t','r','b']):
-                    # change _name_to_top_map
                     key = 'rois_%d_%s' % (ind+1,s)
                     blobs[key] = rois_blob[ind*4+i]
             else:
-                # change _name_to_top_map
                 key = 'rois_%d' % (ind+1)
                 blobs[key] = rois_blob[ind]
 

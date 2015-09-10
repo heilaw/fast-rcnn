@@ -21,6 +21,33 @@ import os
 
 import scipy.io as sio
 
+def _get_4_side_bbox(bbox, im_width, im_height):
+    assert(bbox.ndim == 1 and bbox.shape[0] == 4)
+    # get radius
+    w = bbox[2]-bbox[0]+1;
+    h = bbox[3]-bbox[1]+1;
+    r = (w+h)/2;
+    # get boxes
+    bbox_l = np.array([np.maximum(bbox[0]-0.5*r,1),
+                       bbox[1],
+                       bbox[2]-0.5*w,
+                       bbox[3]])
+    bbox_t = np.array([bbox[0],
+                       np.maximum(bbox[1]-0.5*h,1),
+                       bbox[2],
+                       bbox[3]-0.5*h])
+    bbox_r = np.array([bbox[0]+0.5*w,
+                       bbox[1],
+                       np.minimum(bbox[2]+0.5*r,im_width),
+                       bbox[3]])
+    bbox_b = np.array([bbox[0],
+                       bbox[1]+0.5*h,
+                       bbox[2],
+                       np.minimum(bbox[3]+0.5*h,im_height)])
+
+    # return in the order left, top, right, bottom
+    return bbox_l[None,:], bbox_t[None,:], bbox_r[None,:], bbox_b[None,:]
+
 def _get_image_blob(im):
     """Converts an image into a network input.
 
@@ -101,9 +128,22 @@ def _project_im_rois(im_rois, scales):
 
 def _get_blobs(im, rois):
     """Convert an image and RoIs within that image into network inputs."""
-    blobs = {'data' : None, 'rois' : None}
+    blobs = {'data' : None}
     blobs['data'], im_scale_factors = _get_image_blob(im)
-    blobs['rois'] = _get_rois_blob(rois, im_scale_factors)
+    
+    # This script is only used for HICO (FLAG_HICO will always be False),
+    # so we don't need to handle blob 'rois'
+    for ind in xrange(cfg.TOP_K):
+        if cfg.FEAT_TYPE == 4:
+            rois_l, rois_t, rois_r, rois_b, \
+                = _get_4_side_bbox(rois[ind,:], im.shape[1], im.shape[0])
+            for s in ['l','t','r','b']:
+                key = 'rois_%d_%s' % (ind+1,s)
+                blobs[key] = _get_rois_blob(rois_l, im_scale_factors)
+        else:
+            key = 'rois_%d' % (ind+1)
+            blobs[key] = _get_rois_blob(rois[ind:ind+1,:], im_scale_factors)
+
     return blobs, im_scale_factors
 
 # def _bbox_pred(boxes, box_deltas):
@@ -168,23 +208,33 @@ def im_detect(net, im, boxes):
     """
     blobs, unused_im_scale_factors = _get_blobs(im, boxes)
 
-    # When mapping from image ROIs to feature map ROIs, there's some aliasing
-    # (some distinct image ROIs get mapped to the same feature ROI).
-    # Here, we identify duplicate feature ROIs, so we only compute features
-    # on the unique subset.
-    if cfg.DEDUP_BOXES > 0:
-        v = np.array([1, 1e3, 1e6, 1e9, 1e12])
-        hashes = np.round(blobs['rois'] * cfg.DEDUP_BOXES).dot(v)
-        _, index, inv_index = np.unique(hashes, return_index=True,
-                                        return_inverse=True)
-        blobs['rois'] = blobs['rois'][index, :]
-        boxes = boxes[index, :]
+    # Disable box dedup for HICO
+    # # When mapping from image ROIs to feature map ROIs, there's some aliasing
+    # # (some distinct image ROIs get mapped to the same feature ROI).
+    # # Here, we identify duplicate feature ROIs, so we only compute features
+    # # on the unique subset.
+    # if cfg.DEDUP_BOXES > 0:
+    #     v = np.array([1, 1e3, 1e6, 1e9, 1e12])
+    #     hashes = np.round(blobs['rois'] * cfg.DEDUP_BOXES).dot(v)
+    #     _, index, inv_index = np.unique(hashes, return_index=True,
+    #                                     return_inverse=True)
+    #     blobs['rois'] = blobs['rois'][index, :]
+    #     boxes = boxes[index, :]
 
-    # reshape network inputs
+    # reshape network inputs and concat input blobs
     net.blobs['data'].reshape(*(blobs['data'].shape))
-    net.blobs['rois'].reshape(*(blobs['rois'].shape))
-    blobs_out = net.forward(data=blobs['data'].astype(np.float32, copy=False),
-                            rois=blobs['rois'].astype(np.float32, copy=False))
+    for ind in xrange(cfg.TOP_K):
+        if cfg.FEAT_TYPE == 4:
+            for s in ['l','t','r','b']:
+                key = 'rois_%d_%s' % (ind+1,s)
+                net.blobs[key].reshape(*(blobs[key].shape))
+        else:
+            key = 'rois_%d' % (ind+1)
+            net.blobs[key].reshape(*(blobs[key].shape))
+
+    # forward pass    
+    blobs_out = net.forward(**(blobs))
+
     if cfg.TEST.SVM:
         # use the raw scores before softmax under the assumption they
         # were trained as linear SVMs
@@ -193,7 +243,11 @@ def im_detect(net, im, boxes):
         # use softmax estimated probabilities
         scores = blobs_out['cls_prob']
     
-    feats  = net.blobs['fc7'].data
+    # save feature
+    if cfg.FEAT_TYPE == 4:
+        feats = net.blobs['fc7_concat'].data
+    else:
+        feats = net.blobs['fc7'].data
 
     assert(cfg.TEST.BBOX_REG == False)
     if cfg.TEST.BBOX_REG:
@@ -205,11 +259,12 @@ def im_detect(net, im, boxes):
         # Simply repeat the boxes, once for each class
         pred_boxes = np.tile(boxes, (1, scores.shape[1]))
 
-    if cfg.DEDUP_BOXES > 0:
-        # Map scores and predictions back to the original set of boxes
-        scores = scores[inv_index, :]
-        pred_boxes = pred_boxes[inv_index, :]
-        feats = feats[inv_index, :]
+    # Disable box dedup for HICO
+    # if cfg.DEDUP_BOXES > 0:
+    #     # Map scores and predictions back to the original set of boxes
+    #     scores = scores[inv_index, :]
+    #     pred_boxes = pred_boxes[inv_index, :]
+    #     feats = feats[inv_index, :]
 
     return scores, pred_boxes, feats
 
@@ -277,6 +332,8 @@ def test_net_hico(net, imdb, feat_root):
     
     if not os.path.exists(feat_root):
         os.makedirs(feat_root)
+
+    assert(cfg.FLAG_HICO == True)
 
     # timers
     _t = {'im_detect' : Timer(), 'misc' : Timer()}

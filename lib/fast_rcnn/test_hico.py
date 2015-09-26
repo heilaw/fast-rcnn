@@ -206,6 +206,7 @@ def im_detect(net, im, boxes):
             background as object category 0)
         boxes (ndarray): R x (4*K) array of predicted bounding boxes
     """
+    print boxes.shape;
     blobs, unused_im_scale_factors = _get_blobs(im, boxes)
 
     # Disable box dedup for HICO
@@ -235,29 +236,31 @@ def im_detect(net, im, boxes):
     # forward pass    
     blobs_out = net.forward(**(blobs))
 
-    if cfg.TEST.SVM:
+    # if cfg.TEST.SVM:
         # use the raw scores before softmax under the assumption they
         # were trained as linear SVMs
-        scores = net.blobs['cls_score'].data
-    else:
+        # scores = net.blobs['cls_score'].data
+    # else:
         # use softmax estimated probabilities
-        scores = blobs_out['cls_prob']
+        # scores = blobs_out['cls_prob']
+    scores = []
     
     # save feature
     if cfg.FEAT_TYPE == 4:
         feats = net.blobs['fc7_concat'].data
     else:
-        feats = net.blobs['fc7'].data
+        feats = net.blobs['cls_score'].data
 
-    assert(cfg.TEST.BBOX_REG == False)
-    if cfg.TEST.BBOX_REG:
+    # assert(cfg.TEST.BBOX_REG == False)
+    # if cfg.TEST.BBOX_REG:
         # Apply bounding-box regression deltas
-        box_deltas = blobs_out['bbox_pred']
-        pred_boxes = _bbox_pred(boxes, box_deltas)
-        pred_boxes = _clip_boxes(pred_boxes, im.shape)
-    else:
+        # box_deltas = blobs_out['bbox_pred']
+        # pred_boxes = _bbox_pred(boxes, box_deltas)
+        # pred_boxes = _clip_boxes(pred_boxes, im.shape)
+    # else:
         # Simply repeat the boxes, once for each class
-        pred_boxes = np.tile(boxes, (1, scores.shape[1]))
+        # pred_boxes = np.tile(boxes, (1, scores.shape[1]))
+    pred_boxes = []
 
     # Disable box dedup for HICO
     # if cfg.DEDUP_BOXES > 0:

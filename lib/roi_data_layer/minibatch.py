@@ -42,7 +42,7 @@ def get_minibatch(roidb, num_classes):
         rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K * 4
     else:
         rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K
-    labels_blob = np.zeros((0), dtype=np.float32)
+    labels_blob = np.zeros((0, roidb[0]['label'].shape[0]), dtype=np.float32)
     bbox_targets_blob = np.zeros((0, 4 * num_classes), dtype=np.float32)
     bbox_loss_blob = np.zeros(bbox_targets_blob.shape, dtype=np.float32)
     # all_overlaps = []
@@ -68,7 +68,9 @@ def get_minibatch(roidb, num_classes):
                 else:
                     # get tight bbox
                     im_rois[ind] = roidb[im_i]['boxes'][ind:ind+1,:]
-            labels  = roidb[im_i]['label'][0:1]
+            labels  = roidb[im_i]['label']
+            # print 'minibatch label'
+            # print labels.shape
             bbox_targets = np.zeros((0, 4 * num_classes), dtype=np.float32)
             bbox_loss = np.zeros(bbox_targets.shape, dtype=np.float32)
 
@@ -80,7 +82,11 @@ def get_minibatch(roidb, num_classes):
             rois_blob[ind] = np.vstack((rois_blob[ind], rois_blob_this_image))
 
         # Add to labels, bbox targets, and bbox loss blobs
-        labels_blob = np.hstack((labels_blob, labels))
+        # print 'labels_blob.shape'
+        # print labels_blob.shape
+        # print 'labels.shape'
+        # print labels.shape
+        labels_blob = np.vstack((labels_blob, labels.T))
         bbox_targets_blob = np.vstack((bbox_targets_blob, bbox_targets))
         bbox_loss_blob = np.vstack((bbox_loss_blob, bbox_loss))
         # all_overlaps = np.hstack((all_overlaps, overlaps))

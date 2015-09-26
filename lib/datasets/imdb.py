@@ -110,8 +110,8 @@ class imdb(object):
             boxes[:, 2] = widths[i] - oldx1 - 1
             assert (boxes[:, 2] >= boxes[:, 0]).all()
             if self._flag_hico:
-                entry = {'index' : self.roidb[i]['index'],  # TODO: drop this later
-                         'boxes' : boxes,
+                # entry = {'index' : self.roidb[i]['index'],  # TODO: drop this later
+                entry = {'boxes' : boxes,
                          'label' : self.roidb[i]['label'],
                          'flipped' : True}
             else:

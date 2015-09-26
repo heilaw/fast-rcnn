@@ -32,7 +32,7 @@ class im_horse(datasets.imdb):
         # Set input paths and files
         self._data_path = './caches/im_base/horse/' + image_set_org
         self._det_path = './caches/det_base/horse/' + image_set_org
-        self._anno_file = './caches/anno_base/anno_horse_640.mat'
+        self._anno_file = './caches/anno_base/anno_horse.mat'
         self._classes = ('feed', 
                          'groom',
                          'hold',
@@ -106,11 +106,13 @@ class im_horse(datasets.imdb):
                                   self.name + '_selective_search_roidb.pkl')
 
         if os.path.exists(cache_file):
+            # print 'cache found'
+            # print cache_file
             with open(cache_file, 'rb') as fid:
                 roidb = cPickle.load(fid)
             print '{} ss roidb loaded from {}'.format(self.name, cache_file)
-            if self._image_set == 'train2015_single':
-                self.update_image_set_index(roidb)  # TODO: drop this line later
+            # if self._image_set == 'train2015_single':
+                # self.update_image_set_index(roidb)  # TODO: drop this line later
             return roidb
 
         # Load selective search results: no longer needs this
@@ -160,14 +162,14 @@ class im_horse(datasets.imdb):
         # Expand the dataset; TODO: drop this later
         if self._image_set == 'train2015_single':
             print 'expanding data for single label training ...'
-            roidb = []
-            for idx, index in enumerate(self._image_index):
-                for j in xrange(raw_single[idx]['label'].size):
-                    roidb.append({'index' : index,
-                                  'boxes' : raw_single[idx]['boxes'], 
-                                  'label' : np.array([raw_single[idx]['label'][j]]),
-                                  'flipped' : raw_single[idx]['flipped']})
-            self.update_image_set_index(roidb)
+            roidb = raw_single
+            # for idx, index in enumerate(self._image_index):
+                # for j in xrange(raw_single[idx]['label'].size):
+                    # roidb.append({'index' : index,
+                                  # 'boxes' : raw_single[idx]['boxes'], 
+                                  # 'label' : np.array([raw_single[idx]['label'][j]]),
+                                  # 'flipped' : raw_single[idx]['flipped']})
+            # self.update_image_set_index(roidb)
         if self._image_set == 'train2015' or self._image_set == 'test2015':
             roidb = raw_single
             # for rois in roidb:
@@ -199,7 +201,9 @@ class im_horse(datasets.imdb):
         assert(len(ind) == 1)
         
         # Read labels
-        labels = np.where(anno[:,ind] == 1)[0]
+        labels = anno[:, ind]
+        labels[labels != 1] = 0
+        # labels = np.where(anno[:,ind] == 1)[0]
         
         return {'boxes' : boxes, 'label' : labels, 'flipped' : False}
 

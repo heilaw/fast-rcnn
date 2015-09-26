@@ -41,14 +41,17 @@ class RoIDataLayer(caffe.Layer):
         separate process and made available through self._blob_queue.
         """
         if cfg.TRAIN.USE_PREFETCH:
+            # print 'prefetched'
             return self._blob_queue.get()
         else:
+            # print 'unprefetched'
             db_inds = self._get_next_minibatch_inds()
             minibatch_db = [self._roidb[i] for i in db_inds]
             return get_minibatch(minibatch_db, self._num_classes)
 
     def set_roidb(self, roidb):
         """Set the roidb to be used by this layer during training."""
+        print 'roidb set'
         self._roidb = roidb
         self._shuffle_roidb_inds()
         if cfg.TRAIN.USE_PREFETCH:
@@ -113,7 +116,8 @@ class RoIDataLayer(caffe.Layer):
             # fix labels
             ind = len(self._name_to_top_map.keys())
             self._name_to_top_map['labels'] = ind
-            top[ind].reshape(1)
+            # top[ind].reshape(1, self._roidb[0]['labels'].shape[0])
+            top[ind].reshape(1, 17)
 
         if cfg.TRAIN.BBOX_REG:
             self._name_to_top_map['bbox_targets'] = 3
@@ -132,11 +136,15 @@ class RoIDataLayer(caffe.Layer):
         blobs = self._get_next_minibatch()
 
         for blob_name, blob in blobs.iteritems():
+            # print blob_name
+            # print blob.shape
             top_ind = self._name_to_top_map[blob_name]
             # Reshape net's input blobs
             top[top_ind].reshape(*(blob.shape))
             # Copy data into net's input blobs
             top[top_ind].data[...] = blob.astype(np.float32, copy=False)
+            
+        # print 'forward done'
 
     def backward(self, top, propagate_down, bottom):
         """This layer does not propagate gradients."""

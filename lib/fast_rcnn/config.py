@@ -30,6 +30,7 @@ cfg = __C
 # This is for the hico experiment
 __C.FLAG_HICO = False
 __C.FLAG_SIGMOID = False
+__C.FLAG_ENLARGE = False
 
 # top K detection boxes (only for FLAG_HICO = True)
 __C.TOP_K = 1

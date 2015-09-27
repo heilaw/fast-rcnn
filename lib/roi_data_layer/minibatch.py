@@ -65,6 +65,14 @@ def get_minibatch(roidb, num_classes):
                          = _get_4_side_bbox(roidb[im_i]['boxes'][ind,:], 
                                             w_org[im_i], 
                                             h_org[im_i])
+                elif cfg.FLAG_ENLARGE:
+                    im_rois[ind] = _enlarge_bbox(roidb[im_i]['boxes'][ind, :],
+                                    w_org[im_i],
+                                    h_org[im_i])
+                    im = cv2.imread(roidb[im_i]['image'])
+                    im = im[im_rois[ind][0, 1]:im_rois[ind][0, 3], im_rois[ind][0, 0]:im_rois[ind][0, 2]]
+                    cv2.imwrite('/home/heilaw/pause.jpg', im)
+                    raw_input('pause...')
                 else:
                     # get tight bbox
                     im_rois[ind] = roidb[im_i]['boxes'][ind:ind+1,:]
@@ -165,6 +173,21 @@ def _sample_rois(roidb, fg_rois_per_image, rois_per_image, num_classes):
                                         num_classes)
 
     return labels, overlaps, rois, bbox_targets, bbox_loss_weights
+
+def _enlarge_bbox(bbox, im_width, im_height):
+    w = bbox[2] - bbox[0] + 1;
+    h = bbox[3] - bbox[1] + 1;
+    r = (w + h) / 2
+
+    x_c = np.floor((bbox[2] + bbox[0]) / 2)
+    y_c = np.floor((bbox[3] + bbox[1]) / 2)
+
+    bboxes = np.array([[np.maximum(x_c - w / 2 - r, 1),
+                    np.maximum(y_c - h / 2 - r, 1),
+                    np.minimum(x_c + w / 2 + r, im_width),
+                    np.minimum(y_c + h / 2 + r, im_height)]])
+
+    return bboxes
 
 def _get_4_side_bbox(bbox, im_width, im_height):
     assert(bbox.ndim == 1 and bbox.shape[0] == 4)

@@ -48,6 +48,21 @@ def _get_4_side_bbox(bbox, im_width, im_height):
     # return in the order left, top, right, bottom
     return bbox_l[None,:], bbox_t[None,:], bbox_r[None,:], bbox_b[None,:]
 
+def _enlarge_bbox(bbox, im_width, im_height):
+    w = bbox[2] - bbox[0] + 1;
+    h = bbox[3] - bbox[1] + 1;
+    r = (w + h) / 2
+
+    x_c = np.floor((bbox[2] + bbox[0]) / 2)
+    y_c = np.floor((bbox[3] + bbox[1]) / 2)
+
+    bboxes = np.array([[np.maximum(x_c - w / 2 - r, 1),
+                    np.maximum(y_c - h / 2 - r, 1),
+                    np.minimum(x_c + w / 2 + r, im_width),
+                    np.minimum(y_c + h / 2 + r, im_height)]])
+
+    return bboxes
+
 def _get_image_blob(im):
     """Converts an image into a network input.
 
@@ -142,7 +157,11 @@ def _get_blobs(im, rois):
                 blobs[key] = _get_rois_blob(rois_l, im_scale_factors)
         else:
             key = 'rois_%d' % (ind+1)
-            blobs[key] = _get_rois_blob(rois[ind:ind+1,:], im_scale_factors)
+            if cfg.FLAG_ENLARGE:
+                rois_e = _enlarge_bbox(rois[ind, :], im.shape[1], im.shape[0])
+                blobs[key] = _get_rois_blob(rois_e, im_scale_factors)
+            else:
+                blobs[key] = _get_rois_blob(rois[ind:ind+1,:], im_scale_factors)
 
     return blobs, im_scale_factors
 

@@ -19,7 +19,7 @@ import os.path as osp
 
 class im_horse(datasets.imdb):
     def __init__(self, image_set, root_dir):
-        if image_set == 'train2015_single':
+        if (image_set == 'train2015_single' or image_set =='train2015_sigmoid'):
             image_set_org = 'train2015'
         else:
             image_set_org = image_set
@@ -106,13 +106,11 @@ class im_horse(datasets.imdb):
                                   self.name + '_selective_search_roidb.pkl')
 
         if os.path.exists(cache_file):
-            # print 'cache found'
-            # print cache_file
             with open(cache_file, 'rb') as fid:
                 roidb = cPickle.load(fid)
             print '{} ss roidb loaded from {}'.format(self.name, cache_file)
-            # if self._image_set == 'train2015_single':
-                # self.update_image_set_index(roidb)  # TODO: drop this line later
+            if self._image_set == 'train2015_single':
+                self.update_image_set_index(roidb)  # TODO: drop this line later
             return roidb
 
         # Load selective search results: no longer needs this
@@ -147,9 +145,12 @@ class im_horse(datasets.imdb):
     def _load_detection_roidb(self):
         # Load HICO annotation
         assert(self._image_set == 'train2015_single' or
+               self._image_set == 'train2015_sigmoid' or
                self._image_set == 'train2015' or 
                self._image_set == 'test2015')
-        if self._image_set == 'train2015_single' or self._image_set == 'train2015':
+        if (self._image_set == 'train2015_single' or
+            self._image_set == 'train2015' or
+            self._image_set == 'train2015_sigmoid'):
             anno = sio.loadmat(self._anno_file)['anno_train']
             lsim = sio.loadmat(self._anno_file)['list_train']
         if self._image_set == 'test2015':
@@ -162,15 +163,16 @@ class im_horse(datasets.imdb):
         # Expand the dataset; TODO: drop this later
         if self._image_set == 'train2015_single':
             print 'expanding data for single label training ...'
-            roidb = raw_single
-            # for idx, index in enumerate(self._image_index):
-                # for j in xrange(raw_single[idx]['label'].size):
-                    # roidb.append({'index' : index,
-                                  # 'boxes' : raw_single[idx]['boxes'], 
-                                  # 'label' : np.array([raw_single[idx]['label'][j]]),
-                                  # 'flipped' : raw_single[idx]['flipped']})
-            # self.update_image_set_index(roidb)
-        if self._image_set == 'train2015' or self._image_set == 'test2015':
+            for idx, index in enumerate(self._image_index):
+                for j in xrange(raw_single[idx]['label'].size):
+                    roidb.append({'index' : index,
+                                  'boxes' : raw_single[idx]['boxes'], 
+                                  'label' : np.array([raw_single[idx]['label'][j]]),
+                                  'flipped' : raw_single[idx]['flipped']})
+            self.update_image_set_index(roidb)
+        if (self._image_set == 'train2015' or 
+            self._image_set == 'test2015' or
+            self._image_set == 'train2015_sigmoid'):
             roidb = raw_single
             # for rois in roidb:
             #     rois.pop("index", None)
@@ -184,6 +186,7 @@ class im_horse(datasets.imdb):
         # ---------------------------------------------------------------------
          
         # Load detection file
+        print index
         filename = os.path.join(self._det_path, os.path.splitext(index)[0] + '.mat')
         #print 'Loading: {}'.format(filename)
         assert os.path.exists(filename), \
@@ -201,9 +204,11 @@ class im_horse(datasets.imdb):
         assert(len(ind) == 1)
         
         # Read labels
-        labels = anno[:, ind]
-        labels[labels != 1] = 0
-        # labels = np.where(anno[:,ind] == 1)[0]
+        if self._image_set == 'train2015_sigmoid':
+            labels = anno[:, ind]
+            labels[labels != 1] = 0
+        else:
+            labels = np.where(anno[:,ind] == 1)[0]
         
         return {'boxes' : boxes, 'label' : labels, 'flipped' : False}
 

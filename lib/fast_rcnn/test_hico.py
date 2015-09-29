@@ -265,7 +265,7 @@ def im_detect(net, im, boxes):
     scores = []
     
     # save feature
-    if cfg.FEAT_TYPE == 4:
+    if cfg.FEAT_TYPE == 4 and not cfg.FLAG_SIGMOID:
         feats = net.blobs['fc7_concat'].data
     elif cfg.FLAG_SIGMOID:
         feats = net.blobs['cls_score'].data

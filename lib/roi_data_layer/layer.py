@@ -116,7 +116,7 @@ class RoIDataLayer(caffe.Layer):
             if cfg.FLAG_SIGMOID:
                 top[ind].reshape(1, 17)
             else:
-                top[ind].reshape(1, self._roidb[0]['labels'].shape[0])
+                top[ind].reshape(1)
 
         if cfg.TRAIN.BBOX_REG:
             self._name_to_top_map['bbox_targets'] = 3

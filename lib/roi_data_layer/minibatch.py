@@ -7,11 +7,15 @@
 
 """Compute minibatch blobs for training a Fast R-CNN network."""
 
+import pyximport
+pyximport.install()
+
 import numpy as np
 import numpy.random as npr
 import cv2
 from fast_rcnn.config import cfg
 from utils.blob import prep_im_for_blob, im_list_to_blob
+from utils.bbox import bbox_overlaps
 
 def get_minibatch(roidb, num_classes):
     """Given a roidb, construct a minibatch sampled from it."""
@@ -40,6 +44,8 @@ def get_minibatch(roidb, num_classes):
     if cfg.FEAT_TYPE == 4:
         # 4-side context feature
         rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K * 4
+    elif cfg.FLAG_EXTRA:
+        rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K * 2
     else:
         rois_blob = [np.zeros((0, 5), dtype=np.float32)] * cfg.TOP_K
     labels_blob = np.zeros((0, roidb[0]['label'].shape[0]), dtype=np.float32)
@@ -50,6 +56,8 @@ def get_minibatch(roidb, num_classes):
         im_rois = [0] * cfg.TOP_K
         if cfg.FEAT_TYPE == 4:
             im_rois = im_rois * 4
+        elif cfg.FLAG_EXTRA:
+            im_rois = im_rois * 2
         if not cfg.FLAG_HICO:
             assert(cfg.TOP_K == 1 and cfg.FEAT_TYPE == 0)
             labels, overlaps, im_rois[0], bbox_targets, bbox_loss \
@@ -65,14 +73,15 @@ def get_minibatch(roidb, num_classes):
                          = _get_4_side_bbox(roidb[im_i]['boxes'][ind,:], 
                                             w_org[im_i], 
                                             h_org[im_i])
+                elif cfg.FLAG_EXTRA:
+                    im_rois[ind * 2 + 0], im_rois[ind * 2 + 1] \
+                        = _get_extra_bbox(roidb[im_i]['boxes'], ind)
                 elif cfg.FLAG_ENLARGE:
                     im_rois[ind] = _enlarge_bbox(roidb[im_i]['boxes'][ind, :],
                                     w_org[im_i],
                                     h_org[im_i])
                     im = cv2.imread(roidb[im_i]['image'])
                     im = im[im_rois[ind][0, 1]:im_rois[ind][0, 3], im_rois[ind][0, 0]:im_rois[ind][0, 2]]
-                    cv2.imwrite('/home/heilaw/pause.jpg', im)
-                    raw_input('pause...')
                 else:
                     # get tight bbox
                     im_rois[ind] = roidb[im_i]['boxes'][ind:ind+1,:]
@@ -117,6 +126,10 @@ def get_minibatch(roidb, num_classes):
                 for i, s in enumerate(['l','t','r','b']):
                     key = 'rois_%d_%s' % (ind+1,s)
                     blobs[key] = rois_blob[ind*4+i]
+            elif cfg.FLAG_EXTRA:
+                for i in range(2):
+                    key = 'rois_%d' % (ind * 2 + i + 1)
+                    blobs[key] = rois_blob[ind * 2 + i]
             else:
                 key = 'rois_%d' % (ind+1)
                 blobs[key] = rois_blob[ind]
@@ -126,6 +139,14 @@ def get_minibatch(roidb, num_classes):
         blobs['bbox_loss_weights'] = bbox_loss_blob
 
     return blobs
+
+def _get_extra_bbox(bbox, ind, l=0, u=1):
+    overlaps = bbox_overlaps(bbox.astype(np.float), bbox[ind, np.newaxis].astype(np.float))
+    over_ind = np.where((overlaps >= l) & (overlaps <= u))[0]
+    over_ind = over_ind[ind + 1:]
+
+    rand_ind = np.random.randint(over_ind.shape[0])
+    return bbox[ind, np.newaxis], bbox[rand_ind, np.newaxis]
 
 def _sample_rois(roidb, fg_rois_per_image, rois_per_image, num_classes):
     """Generate a random sample of RoIs comprising foreground and background

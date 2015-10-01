@@ -31,6 +31,7 @@ cfg = __C
 __C.FLAG_HICO = False
 __C.FLAG_SIGMOID = False
 __C.FLAG_ENLARGE = False
+__C.FLAG_EXTRA = False
 
 # top K detection boxes (only for FLAG_HICO = True)
 __C.TOP_K = 1

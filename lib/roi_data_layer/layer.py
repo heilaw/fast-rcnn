@@ -104,6 +104,11 @@ class RoIDataLayer(caffe.Layer):
                         self._name_to_top_map[key] = ind*4+(i+1)
                         # reshape
                         top[ind*4+(i+1)].reshape(1, 5)
+                elif cfg.FLAG_EXTRA:
+                    for i in range(2):
+                        key = 'rois_%d' % (ind * 2 + i + 1)
+                        self._name_to_top_map[key] = ind * 2 + (i + 1)
+                        top[ind * 2 + (i + 1)].reshape(1, 5)
                 else:
                     # change _name_to_top_map
                     key = 'rois_%d' % (ind+1)

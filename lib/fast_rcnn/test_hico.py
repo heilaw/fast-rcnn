@@ -6,6 +6,8 @@
 # --------------------------------------------------------
 
 """Test a Fast R-CNN network on an imdb (image database)."""
+import pyximport
+pyximport.install()
 
 from fast_rcnn.config import cfg, get_output_dir
 import argparse
@@ -20,6 +22,15 @@ from utils.blob import im_list_to_blob
 import os
 
 import scipy.io as sio
+from utils.bbox import bbox_overlaps
+
+def _get_extra_bbox(bbox, ind, l=0, u=1):
+    overlaps = bbox_overlaps(bbox.astype(np.float), bbox[ind, np.newaxis].astype(np.float))
+    over_ind = np.where((overlaps >= l) & (overlaps <= u))[0]
+    over_ind = over_ind[ind + 1:]
+
+    rand_ind = np.random.randint(over_ind.shape[0])
+    return bbox[ind, np.newaxis], bbox[rand_ind, np.newaxis]
 
 def _get_4_side_bbox(bbox, im_width, im_height):
     assert(bbox.ndim == 1 and bbox.shape[0] == 4)
@@ -154,7 +165,15 @@ def _get_blobs(im, rois):
                 = _get_4_side_bbox(rois[ind,:], im.shape[1], im.shape[0])
             for s in ['l','t','r','b']:
                 key = 'rois_%d_%s' % (ind+1,s)
+                # Is this a bug?
                 blobs[key] = _get_rois_blob(rois_l, im_scale_factors)
+        elif cfg.FLAG_EXTRA:
+            im_rois = [0] * 2
+            im_rois[0], im_rois[1] \
+                = _get_extra_bbox(rois, ind)
+            for i in range(2):
+                key = 'rois_%d' % (ind * 2 + i + 1)
+                blobs[key] = _get_rois_blob(im_rois[i], im_scale_factors)
         else:
             key = 'rois_%d' % (ind+1)
             if cfg.FLAG_ENLARGE:
@@ -248,6 +267,10 @@ def im_detect(net, im, boxes):
             for s in ['l','t','r','b']:
                 key = 'rois_%d_%s' % (ind+1,s)
                 net.blobs[key].reshape(*(blobs[key].shape))
+        elif cfg.FLAG_EXTRA:
+            for i in range(2):
+                key = 'rois_%d' % (ind * 2 + i + 1)
+                net.blobs[key].reshape(*(blobs[key].shape))
         else:
             key = 'rois_%d' % (ind+1)
             net.blobs[key].reshape(*(blobs[key].shape))
@@ -267,6 +290,8 @@ def im_detect(net, im, boxes):
     # save feature
     if cfg.FEAT_TYPE == 4 and not cfg.FLAG_SIGMOID:
         feats = net.blobs['fc7_concat'].data
+    elif cfg.FLAG_EXTRA:
+        feats = net.blobs['cls_score_sum'].data
     elif cfg.FLAG_SIGMOID:
         feats = net.blobs['cls_score'].data
     else:

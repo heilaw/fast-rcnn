@@ -18,13 +18,14 @@ import subprocess
 import os.path as osp
 
 class im_horse(datasets.imdb):
-    def __init__(self, image_set, root_dir):
+    def __init__(self, image_set, root_dir, ss_file):
         if (image_set == 'train2015_single' or image_set =='train2015_sigmoid'):
             image_set_org = 'train2015'
         else:
             image_set_org = image_set
         datasets.imdb.__init__(self, 'im_horse_' + image_set, True)
         self._image_set = image_set
+        self._ss_bbox = sio.loadmat(ss_file)['boxes'].ravel()
         # Set cache root
         self._cache_root = osp.abspath(osp.join(root_dir, 'data', 'cache'))
         if not os.path.exists(self._cache_root):
@@ -173,6 +174,8 @@ class im_horse(datasets.imdb):
         if (self._image_set == 'train2015' or 
             self._image_set == 'test2015' or
             self._image_set == 'train2015_sigmoid'):
+            for idx, index in enumerate(self._image_index):
+                raw_single[idx]['ss_bbox'] = self._ss_bbox[idx][:, (1, 0, 3, 2)]
             roidb = raw_single
             # for rois in roidb:
             #     rois.pop("index", None)
@@ -198,7 +201,7 @@ class im_horse(datasets.imdb):
         dets = dets[keep,:]
         # Keep all the detection boxes now and filter later in data fetching
         boxes = dets[:,0:4]
-        boxes = np.around(boxes).astype('uint16')        
+        boxes = np.around(boxes).astype('uint16')
         # Get image index
         ind = [idx for idx, im in enumerate(lsim) if str(im[0][0]) == index]
         assert(len(ind) == 1)

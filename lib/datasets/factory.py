@@ -44,8 +44,12 @@ for top_k in np.arange(1000, 11000, 1000):
 hico_set = ['train2015_single', 'train2015', 'test2015', 'train2015_sigmoid']
 for image_set in hico_set:
     name = 'im_horse_{}'.format(image_set)
-    __sets[name] = (lambda image_set=image_set:
-                    datasets.im_horse(image_set, cfg.ROOT_DIR))
+    if image_set == 'test2015':
+        __sets[name] = (lambda image_set=image_set:
+                        datasets.im_horse(im_horse, cfg.ROOT_DIR, cfg.SS_TEST))
+    else:
+        __sets[name] = (lambda image_set=image_set:
+                        datasets.im_horse(image_set, cfg.ROOT_DIR, cfg.SS_TRAIN))
 
 def get_imdb(name):
     """Get an imdb (image database) by name."""

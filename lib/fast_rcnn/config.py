@@ -32,6 +32,8 @@ __C.FLAG_HICO = False
 __C.FLAG_SIGMOID = False
 __C.FLAG_ENLARGE = False
 __C.FLAG_EXTRA = False
+__C.SS_TRAIN = './caches/selective_search/horse/boxes_train2015.mat'
+__C.SS_TEST = './caches/selective_search/horse/boxes_test2015.mat'
 
 # top K detection boxes (only for FLAG_HICO = True)
 __C.TOP_K = 1

@@ -24,13 +24,12 @@ import os
 import scipy.io as sio
 from utils.bbox import bbox_overlaps
 
-def _get_extra_bbox(bbox, ind, l=0, u=1):
-    overlaps = bbox_overlaps(bbox.astype(np.float), bbox[ind, np.newaxis].astype(np.float))
+def _get_extra_bbox(bbox, ss_bbox, n=1, l=0.2, u=0.75):
+    overlaps = bbox_overlaps(ss_bbox.astype(np.float), bbox[np.newaxis, :].astype(np.float))
     over_ind = np.where((overlaps >= l) & (overlaps <= u))[0]
-    over_ind = over_ind[ind + 1:]
 
     rand_ind = np.random.randint(over_ind.shape[0])
-    return bbox[ind, np.newaxis], bbox[rand_ind, np.newaxis]
+    return ss_bbox[rand_ind, :]
 
 def _get_4_side_bbox(bbox, im_width, im_height):
     assert(bbox.ndim == 1 and bbox.shape[0] == 4)
@@ -152,7 +151,7 @@ def _project_im_rois(im_rois, scales):
 
     return rois, levels
 
-def _get_blobs(im, rois):
+def _get_blobs(im, rois, ss_bbox=None):
     """Convert an image and RoIs within that image into network inputs."""
     blobs = {'data' : None}
     blobs['data'], im_scale_factors = _get_image_blob(im)
@@ -161,16 +160,18 @@ def _get_blobs(im, rois):
     # so we don't need to handle blob 'rois'
     for ind in xrange(cfg.TOP_K):
         if cfg.FEAT_TYPE == 4:
-            rois_l, rois_t, rois_r, rois_b, \
+            im_rois = [0] * 4
+            im_rois[0], im_rois[1], im_rois[2], im_rois[3], \
                 = _get_4_side_bbox(rois[ind,:], im.shape[1], im.shape[0])
-            for s in ['l','t','r','b']:
-                key = 'rois_%d_%s' % (ind+1,s)
+            for i, s in enumerate(['l','t','r','b']):
+                key = 'rois_%d_%s' % (ind + 1,s)
                 # Is this a bug?
-                blobs[key] = _get_rois_blob(rois_l, im_scale_factors)
+                blobs[key] = _get_rois_blob(im_rois[i], im_scale_factors)
         elif cfg.FLAG_EXTRA:
             im_rois = [0] * 2
-            im_rois[0], im_rois[1] \
-                = _get_extra_bbox(rois, ind)
+            im_rois[0] = rois[ind, :]
+            im_rois[1] = _get_extra_bbox(im_rois[0], ss_bbox)
+            print im_rois
             for i in range(2):
                 key = 'rois_%d' % (ind * 2 + i + 1)
                 blobs[key] = _get_rois_blob(im_rois[i], im_scale_factors)
@@ -231,7 +232,7 @@ def _get_blobs(im, rois):
 #     boxes[:, 3::4] = np.minimum(boxes[:, 3::4], im_shape[0] - 1)
 #     return boxes
 
-def im_detect(net, im, boxes):
+def im_detect(net, im, boxes, ss_bbox=None):
     """Detect object classes in an image given object proposals.
 
     Arguments:
@@ -245,7 +246,7 @@ def im_detect(net, im, boxes):
         boxes (ndarray): R x (4*K) array of predicted bounding boxes
     """
     print boxes.shape;
-    blobs, unused_im_scale_factors = _get_blobs(im, boxes)
+    blobs, unused_im_scale_factors = _get_blobs(im, boxes, ss_bbox)
 
     # Disable box dedup for HICO
     # # When mapping from image ROIs to feature map ROIs, there's some aliasing
@@ -396,7 +397,10 @@ def test_net_hico(net, imdb, feat_root):
 
         im = cv2.imread(imdb.image_path_at(i))
         _t['im_detect'].tic()
-        scores, boxes, feats = im_detect(net, im, roidb[i]['boxes'])
+        if cfg.FLAG_EXTRA:
+            scores, boxes, feats = im_detect(net, im, roidb[i]['boxes'], roidb[i]['ss_bbox'])
+        else:
+            scores, boxes, feats = im_detect(net, im, roidb[i]['boxes'])
         _t['im_detect'].toc()
 
         _t['misc'].tic()

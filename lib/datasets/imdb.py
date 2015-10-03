@@ -104,21 +104,28 @@ class imdb(object):
                   for i in xrange(num_images)]
         for i in xrange(num_images):
             boxes = self.roidb[i]['boxes'].copy()
+            ss_bbox = self.roidb[i]['ss_bbox'].copy()
             oldx1 = boxes[:, 0].copy()
             oldx2 = boxes[:, 2].copy()
+            ss_oldx1 = ss_bbox[:, 0].copy()
+            ss_oldx2 = ss_bbox[:, 2].copy()
             boxes[:, 0] = widths[i] - oldx2 - 1
             boxes[:, 2] = widths[i] - oldx1 - 1
+            ss_bbox[:, 0] = widths[i] - ss_oldx2 - 1
+            ss_bbox[:, 2] = widths[i] - ss_oldx1 - 1
             assert (boxes[:, 2] >= boxes[:, 0]).all()
             if self._flag_hico:
                 if 'index' in self.roidb[i]:
                     entry = {'index' : self.roidb[i]['index'],  # TODO: drop this later
                              'boxes' : boxes,
                              'label' : self.roidb[i]['label'],
-                             'flipped' : True}
+                             'flipped' : True,
+                             'ss_bbox' : ss_bbox}
                 else:
                     entry = {'boxes' : boxes,
                              'label' : self.roidb[i]['label'],
-                             'flipped' : True}
+                             'flipped' : True,
+                             'ss_bbox' : ss_bbox}
             else:
                 entry = {'boxes' : boxes,
                          'gt_overlaps' : self.roidb[i]['gt_overlaps'],

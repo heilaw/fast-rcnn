@@ -74,14 +74,12 @@ def get_minibatch(roidb, num_classes):
                                             w_org[im_i], 
                                             h_org[im_i])
                 elif cfg.FLAG_EXTRA:
-                    im_rois[ind * 2 + 0], im_rois[ind * 2 + 1] \
-                        = _get_extra_bbox(roidb[im_i]['boxes'], ind)
+                    im_rois[ind * 2 + 0] = roidb[im_i]['boxes'][ind, np.newaxis]
+                    im_rois[ind * 2 + 1] = _get_extra_bbox(roidb[im_i]['boxes'][ind, :], roidb[im_i]['ss_bbox'])
                 elif cfg.FLAG_ENLARGE:
                     im_rois[ind] = _enlarge_bbox(roidb[im_i]['boxes'][ind, :],
                                     w_org[im_i],
                                     h_org[im_i])
-                    im = cv2.imread(roidb[im_i]['image'])
-                    im = im[im_rois[ind][0, 1]:im_rois[ind][0, 3], im_rois[ind][0, 0]:im_rois[ind][0, 2]]
                 else:
                     # get tight bbox
                     im_rois[ind] = roidb[im_i]['boxes'][ind:ind+1,:]
@@ -140,13 +138,12 @@ def get_minibatch(roidb, num_classes):
 
     return blobs
 
-def _get_extra_bbox(bbox, ind, l=0, u=1):
-    overlaps = bbox_overlaps(bbox.astype(np.float), bbox[ind, np.newaxis].astype(np.float))
+def _get_extra_bbox(bbox, ss_bbox, n=1, l=0.2, u=0.75):
+    overlaps = bbox_overlaps(ss_bbox.astype(np.float), bbox[np.newaxis, :].astype(np.float))
     over_ind = np.where((overlaps >= l) & (overlaps <= u))[0]
-    over_ind = over_ind[ind + 1:]
 
     rand_ind = np.random.randint(over_ind.shape[0])
-    return bbox[ind, np.newaxis], bbox[rand_ind, np.newaxis]
+    return ss_bbox[rand_ind, np.newaxis]
 
 def _sample_rois(roidb, fg_rois_per_image, rois_per_image, num_classes):
     """Generate a random sample of RoIs comprising foreground and background

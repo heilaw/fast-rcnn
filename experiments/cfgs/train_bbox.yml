@@ -1,0 +1,9 @@
+EXP_DIR: "train_bbox"
+TRAIN_BBOX: True
+TRAIN:
+  IMS_PER_BATCH: 1
+  BATCH_SIZE: 4
+  BBOX_REG: False
+  SNAPSHOT_INFIX: train_bbox
+TEST:
+  BBOX_REG: False

@@ -11,6 +11,7 @@
 
 import _init_paths
 from fast_rcnn.test import test_net
+# from fast_rcnn.test_bbox import test_net
 from fast_rcnn.config import cfg, cfg_from_file, cfg_from_list
 from datasets.factory import get_imdb
 import caffe

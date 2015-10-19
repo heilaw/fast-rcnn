@@ -31,6 +31,8 @@ cfg = __C
 # Training options
 #
 
+__C.TRAIN_BBOX = True
+
 __C.TRAIN = edict()
 
 # Scales to use during training (can list multiple scales)
@@ -61,7 +63,7 @@ __C.TRAIN.BG_THRESH_LO = 0.1
 __C.TRAIN.USE_FLIPPED = True
 
 # Train bounding-box regressors
-__C.TRAIN.BBOX_REG = True
+__C.TRAIN.BBOX_REG = False
 
 # Overlap required between a ROI and ground-truth box in order for that ROI to
 # be used as a bounding-box regression training example

@@ -239,7 +239,7 @@ def apply_nms(all_boxes, thresh):
             dets = all_boxes[cls_ind][im_ind]
             if dets == []:
                 continue
-            keep = nms(dets, thresh)
+            keep = nms(dets.astype(np.float32), thresh)
             if len(keep) == 0:
                 continue
             nms_boxes[cls_ind][im_ind] = dets[keep, :].copy()
@@ -272,53 +272,59 @@ def test_net(net, imdb):
     # timers
     _t = {'im_detect' : Timer(), 'misc' : Timer()}
 
-    roidb = imdb.roidb
-    for i in xrange(num_images):
-        im = cv2.imread(imdb.image_path_at(i))
-        _t['im_detect'].tic()
-        scores, boxes = im_detect(net, im, roidb[i]['boxes'])
-        _t['im_detect'].toc()
+    det_file = os.path.join(output_dir, 'detections_bbox.pkl')
+    if os.path.isfile(det_file):
+        with open(det_file, 'rb') as f:
+            all_boxes = cPickle.load(f)
 
-        _t['misc'].tic()
-        for j in xrange(1, imdb.num_classes):
-            inds = np.where((scores[:, j] > thresh[j]) &
-                            (roidb[i]['gt_classes'] == 0))[0]
-            cls_scores = scores[inds, j]
-            cls_boxes = boxes[inds, j*4:(j+1)*4]
-            top_inds = np.argsort(-cls_scores)[:max_per_image]
-            cls_scores = cls_scores[top_inds]
-            cls_boxes = cls_boxes[top_inds, :]
-            # push new scores onto the minheap
-            for val in cls_scores:
-                heapq.heappush(top_scores[j], val)
-            # if we've collected more than the max number of detection,
-            # then pop items off the minheap and update the class threshold
-            if len(top_scores[j]) > max_per_set:
-                while len(top_scores[j]) > max_per_set:
-                    heapq.heappop(top_scores[j])
-                thresh[j] = top_scores[j][0]
-
-            all_boxes[j][i] = \
-                    np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
-                    .astype(np.float32, copy=False)
-
-            if 0:
-                keep = nms(all_boxes[j][i], 0.3)
-                vis_detections(im, imdb.classes[j], all_boxes[j][i][keep, :])
-        _t['misc'].toc()
-
-        print 'im_detect: {:d}/{:d} {:.3f}s {:.3f}s' \
-              .format(i + 1, num_images, _t['im_detect'].average_time,
-                      _t['misc'].average_time)
-
-    for j in xrange(1, imdb.num_classes):
+    else:
+        roidb = imdb.roidb
         for i in xrange(num_images):
-            inds = np.where(all_boxes[j][i][:, -1] > thresh[j])[0]
-            all_boxes[j][i] = all_boxes[j][i][inds, :]
+            im = cv2.imread(imdb.image_path_at(i))
+            _t['im_detect'].tic()
+            scores, boxes = im_detect(net, im, roidb[i]['boxes'])
+            _t['im_detect'].toc()
 
-    det_file = os.path.join(output_dir, 'detections.pkl')
-    with open(det_file, 'wb') as f:
-        cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)
+            _t['misc'].tic()
+            for j in xrange(1, imdb.num_classes):
+                inds = np.where((scores[:, j] > thresh[j]) &
+                                (roidb[i]['gt_classes'] == 0))[0]
+                cls_scores = scores[inds, j]
+                cls_boxes = boxes[inds, j*4:(j+1)*4]
+                top_inds = np.argsort(-cls_scores)[:max_per_image]
+                cls_scores = cls_scores[top_inds]
+                cls_boxes = cls_boxes[top_inds, :]
+                # push new scores onto the minheap
+                for val in cls_scores:
+                    heapq.heappush(top_scores[j], val)
+                # if we've collected more than the max number of detection,
+                # then pop items off the minheap and update the class threshold
+                if len(top_scores[j]) > max_per_set:
+                    while len(top_scores[j]) > max_per_set:
+                        heapq.heappop(top_scores[j])
+                    thresh[j] = top_scores[j][0]
+
+                all_boxes[j][i] = \
+                        np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
+                        .astype(np.float32, copy=False)
+
+                if 0:
+                    keep = nms(all_boxes[j][i], 0.3)
+                    vis_detections(im, imdb.classes[j], all_boxes[j][i][keep, :])
+            _t['misc'].toc()
+
+            print 'im_detect: {:d}/{:d} {:.3f}s {:.3f}s' \
+                  .format(i + 1, num_images, _t['im_detect'].average_time,
+                          _t['misc'].average_time)
+
+        for j in xrange(1, imdb.num_classes):
+            for i in xrange(num_images):
+                inds = np.where(all_boxes[j][i][:, -1] > thresh[j])[0]
+                all_boxes[j][i] = all_boxes[j][i][inds, :]
+
+        det_file = os.path.join(output_dir, 'detections.pkl')
+        with open(det_file, 'wb') as f:
+            cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)
 
     print 'Applying NMS to all detections'
     nms_dets = apply_nms(all_boxes, cfg.TEST.NMS)

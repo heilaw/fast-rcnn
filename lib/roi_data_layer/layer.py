@@ -12,7 +12,7 @@ RoIDataLayer implements a Caffe Python layer.
 
 import caffe
 from fast_rcnn.config import cfg
-from roi_data_layer.minibatch import get_minibatch
+from roi_data_layer.minibatch import get_minibatch, get_minibatch_bbox
 import numpy as np
 import yaml
 from multiprocessing import Process, Queue
@@ -45,6 +45,8 @@ class RoIDataLayer(caffe.Layer):
         else:
             db_inds = self._get_next_minibatch_inds()
             minibatch_db = [self._roidb[i] for i in db_inds]
+            if cfg.TRAIN_BBOX:
+                return get_minibatch_bbox(minibatch_db)
             return get_minibatch(minibatch_db, self._num_classes)
 
     def set_roidb(self, roidb):
@@ -89,7 +91,10 @@ class RoIDataLayer(caffe.Layer):
 
         # labels blob: R categorical labels in [0, ..., K] for K foreground
         # classes plus background
-        top[2].reshape(1)
+        if cfg.TRAIN_BBOX:
+            top[2].reshape(1, 4)
+        else:
+            top[2].reshape(1)
 
         if cfg.TRAIN.BBOX_REG:
             self._name_to_top_map['bbox_targets'] = 3

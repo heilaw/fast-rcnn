@@ -263,10 +263,10 @@ layer {
   }
 }
 layer {
-    name: "bbox_pred"
+    name: "bbox_reg"
     type: "InnerProduct"
     bottom: "fc7"
-    top: "bbox_pred"
+    top: "bbox_reg"
     inner_product_param {
         num_output: 4
     }

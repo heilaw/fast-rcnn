@@ -263,10 +263,10 @@ layer {
   }
 }
 layer {
-  name: "bbox_pred"
+  name: "bbox_reg"
   type: "InnerProduct"
   bottom: "fc7"
-  top: "bbox_pred"
+  top: "bbox_reg"
   param {
     lr_mult: 1
     decay_mult: 1
@@ -290,7 +290,7 @@ layer {
 layer {
   name: "loss_bbox"
   type: "EuclideanLoss"
-  bottom: "bbox_pred"
+  bottom: "bbox_reg"
   bottom: "labels"
   top: "loss_bbox"
 }

@@ -32,7 +32,6 @@ cfg = __C
 #
 
 __C.TRAIN_BBOX = True
-
 __C.TRAIN = edict()
 
 # Scales to use during training (can list multiple scales)

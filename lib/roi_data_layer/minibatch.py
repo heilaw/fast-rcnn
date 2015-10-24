@@ -126,7 +126,7 @@ def _sample_rois_bbox(roi, ov_threshold=0.6):
         for j in range(e_boxes.shape[0]):
             e_box = e_boxes[j, :]
             images.append(roi_img[e_box[1]:e_box[3], e_box[0]:e_box[2], :])
-            im_rois.append(np.array([[0, 0, roi_img.shape[1] - 1, roi_img.shape[0] - 1]]))
+            im_rois.append(np.array([[0, 0, images[-1].shape[1] - 1, images[-1].shape[0] - 1]]))
             labels.append(e_labels[j:j + 1, :])
 
     r_inds = random.sample(range(len(images)), min(len(images), cfg.TRAIN.BATCH_SIZE))
@@ -141,8 +141,8 @@ def _sample_label(boxes, gt_box):
 
     w_gt = gt_box[2] - gt_box[0] + 1
     h_gt = gt_box[3] - gt_box[1] + 1
-    x_gt = np.floor((gt_box[0] - boxes[:, 0])[:, np.newaxis] + w / 2)
-    y_gt = np.floor((gt_box[1] - boxes[:, 1])[:, np.newaxis] + h / 2)
+    x_gt = np.floor((gt_box[0] + w_gt / 2 - boxes[:, 0])[:, np.newaxis])
+    y_gt = np.floor((gt_box[1] + h_gt / 2 - boxes[:, 1])[:, np.newaxis])
 
     sub_label = np.hstack((x_gt / w, y_gt / h, w_gt / w, h_gt / h))
     return sub_label

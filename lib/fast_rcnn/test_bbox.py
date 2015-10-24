@@ -29,7 +29,7 @@ def _get_blobs(im, rois):
     im_orig = im.astype(np.float32, copy=True)
     im_orig -= cfg.PIXEL_MEANS
 
-    processed_ims = [_crop_images(im.copy(), rois[i, :]) for i in xrange(rois.shape[0])]
+    processed_ims = [_crop_images(im_orig.copy(), rois[i, :]) for i in xrange(rois.shape[0])]
     im_blob = im_list_to_blob(processed_ims)
 
     rois = rois - np.hstack((rois[:, 0:1], rois[:, 1:2], rois[:, 0:1], rois[:, 1:2]))
@@ -43,9 +43,9 @@ def bbox_detect(net, im, boxes):
     """
     Generate new bounding box.
     """
-    pred_bbox = np.zeros(boxes.shape, dtype=np.float32))
+    pred_bbox = np.zeros(boxes.shape, dtype=np.float32)
 
-    batch_size = 8
+    batch_size = 32
     for i in range(int(np.ceil(boxes.shape[0] / float(batch_size)))):
         im_rois = _enlarge_boxes(boxes[i * batch_size:min((i + 1) * batch_size, boxes.shape[0]), :], im.shape[1], im.shape[0])
 
@@ -55,7 +55,7 @@ def bbox_detect(net, im, boxes):
         net.blobs['data'].reshape(*(blobs['data'].shape))
         net.blobs['rois'].reshape(*(blobs['rois'].shape))
         blobs_out = net.forward(data=blobs['data'].astype(np.float32, copy=False),
-                                rois=blobs['rois'].astype(np.float32, copy=False))['bbox_pred']
+                                rois=blobs['rois'].astype(np.float32, copy=False))['bbox_reg']
 
         im_width = im_rois[:, 2:3] - im_rois[:, 0:1]
         im_height = im_rois[:, 3:4] - im_rois[:, 1:2]
@@ -73,7 +73,7 @@ def bbox_detect(net, im, boxes):
         pred_bbox[i * batch_size:min((i + 1) * batch_size, boxes.shape[0]), 4] = \
             boxes[i * batch_size:min((i + 1) * batch_size, boxes.shape[0]), 4]
 
-    return pred_bbox.astype(np.int16)
+    return pred_bbox
 
 def _vis_detection(im, bbox):
     for i in range(bbox.shape[0]):

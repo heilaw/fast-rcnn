@@ -88,6 +88,26 @@ def get_minibatch_bbox(roidb):
                                             cfg.TRAIN.MAX_SIZE)
             processed_ims.append(im)
             rois = _project_im_rois(im_rois[j], im_scale)
+
+            # cv_im = im.copy()
+            # cv2.rectangle(cv_im, (int(rois[0, 0]), int(rois[0, 1])), (int(rois[0, 2]), int(rois[0, 3])), (0, 255, 0))
+
+            # im_w = rois[0, 2] - rois[0, 0]
+            # im_h = rois[0, 3] - rois[0, 1]
+
+            # x_c = im_w * labels[j][0, 0]
+            # y_c = im_h * labels[j][0, 1]
+
+            # x1 = int(x_c - im_w * labels[j][0, 2] / 2)
+            # y1 = int(y_c - im_h * labels[j][0, 3] / 2)
+            # x2 = int(x_c + im_w * labels[j][0, 2] / 2)
+            # y2 = int(y_c + im_h * labels[j][0, 3] / 2)
+            # cv2.rectangle(cv_im, (x1, y1), (x2, y2), (0, 0, 255))
+
+            # cv2.imshow('test', cv_im)
+            # print labels[j]
+            # raw_input('Press Enter to Continue')
+
             rois_blob_this_image = np.zeros((1, 5), dtype=np.float32)
             rois_blob_this_image[0, 0] = img_ind
             rois_blob_this_image[0, 1:5] = rois
@@ -150,15 +170,21 @@ def _sample_label(boxes, gt_box):
 def _enlarge_boxes(boxes, im_width, im_height):
     w = (boxes[:, 2] - boxes[:, 0] + 1)[:, np.newaxis]
     h = (boxes[:, 3] - boxes[:, 1] + 1)[:, np.newaxis]
-    r = (w + h) / 4
+    # r = (w + h) / 4
+    w = 1.25 * w
+    h = 1.25 * h
 
     x_c = np.floor((boxes[:, 2] + boxes[:, 0]) / 2)[:, np.newaxis]
     y_c = np.floor((boxes[:, 3] + boxes[:, 1]) / 2)[:, np.newaxis]
 
-    e_boxes = np.hstack((np.maximum(x_c - w / 2 - r, 1),
-        np.maximum(y_c - h / 2 - r, 1),
-        np.minimum(x_c + w / 2 + r, im_width),
-        np.minimum(y_c + h / 2 + r, im_height)))
+    # e_boxes = np.hstack((np.maximum(x_c - w / 2 - r, 1),
+        # np.maximum(y_c - h / 2 - r, 1),
+        # np.minimum(x_c + w / 2 + r, im_width),
+        # np.minimum(y_c + h / 2 + r, im_height)))
+    e_boxes = np.hstack((np.maximum(x_c - w / 2, 0),
+        np.maximum(y_c - h / 2, 0),
+        np.minimum(x_c + w / 2, im_width),
+        np.minimum(y_c + h / 2, im_height)))
     
     return e_boxes
 

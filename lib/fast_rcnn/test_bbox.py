@@ -22,56 +22,98 @@ def _enlarge_boxes(boxes, im_width, im_height):
     
     return e_boxes
 
-def _crop_images(im, roi):
-    return im[roi[1]:roi[3], roi[0]:roi[2], :]
-
-def _get_blobs(im, rois):
+def _get_image_blob(im):
     im_orig = im.astype(np.float32, copy=True)
     im_orig -= cfg.PIXEL_MEANS
 
-    processed_ims = [_crop_images(im_orig.copy(), rois[i, :]) for i in xrange(rois.shape[0])]
-    im_blob = im_list_to_blob(processed_ims)
+    im_shape = im_orig.shape
+    im_size_min = np.min(im_shape[0:2])
+    im_size_max = np.max(im_shape[0:2])
 
-    rois = rois - np.hstack((rois[:, 0:1], rois[:, 1:2], rois[:, 0:1], rois[:, 1:2]))
+    processed_ims = []
+    im_scale_factors = []
 
-    batch_ind = np.array(range(len(processed_ims)))
-    rois_blob = np.hstack((batch_ind[:, np.newaxis], rois))
+    for target_size in cfg.TEST.SCALES:
+        im_scale = float(target_size) / float(im_size_min)
+        if np.round(im_scale * im_size_max) > cfg.TEST.MAX_SIZE:
+            im_scale = float(cfg.TEST.MAX_SIZE) / float(im_size_max)
+        im = cv2.resize(im_orig, None, None, fx=im_scale, fy=im_scale,
+                        interpolation=cv2.INTER_LINEAR)
+        im_scale_factors.append(im_scale)
+        processed_ims.append(im)
 
-    return im_blob, rois_blob
+    blob = im_list_to_blob(processed_ims)
+    return blob, np.array(im_scale_factors)
+
+def _get_rois_blob(im_rois, im_scale_factors):
+    rois, levels = _project_im_rois(im_rois, im_scale_factors)
+    rois_blob = np.hstack((levels, rois))
+    return rois_blob.astype(np.float32, copy=False)
+
+def _get_blobs(im, rois):
+    blobs = {'data': None, 'rois': None}
+    blobs['data'], im_scale_factors = _get_image_blob(im)
+    
+    im_rois = _enlarge_boxes(rois, im.shape[1], im.shape[0])
+    blobs['rois'] = _get_rois_blob(im_rois, im_scale_factors)
+
+    return blobs, im_scale_factors
+
+def _project_im_rois(im_rois, scales):
+    im_rois = im_rois.astype(np.float, copy=False)
+
+    if len(scales) > 1:
+        widths = im_rois[:, 2] - im_rois[:, 0] + 1
+        heights = im_rois[:, 3] = im_rois[:, 1] + 1
+
+        areas = widths * heights
+        scaled_areas = areas[:, np.newaxis] * (scales[np.newaxis, :] ** 2)
+        diff_areas = np.abs(scaled_areas - 224 * 224)
+        levels = diff_areas.argsort(axis=1)[:, np.newaxis]
+    else:
+        levels = np.zeros((im_rois.shape[0], 1), dtype=np.int)
+
+    rois = im_rois * scales[levels]
+    return rois, levels
 
 def bbox_detect(net, im, boxes):
     """
     Generate new bounding box.
     """
+    blobs, unused_im_scale_factors = _get_blobs(im, boxes)
     pred_bbox = np.zeros(boxes.shape, dtype=np.float32)
 
-    batch_size = 32
-    for i in range(int(np.ceil(boxes.shape[0] / float(batch_size)))):
-        im_rois = _enlarge_boxes(boxes[i * batch_size:min((i + 1) * batch_size, boxes.shape[0]), :], im.shape[1], im.shape[0])
+    if boxes.shape[0] < 1:
+        return pred_bbox
+        # for j in range(im_rois.shape[0]):
+            # box = boxes[i * batch_size + j, :]
+            # cv_im = im.copy()
+            # cv2.rectangle(cv_im, (box[0], box[1]), (box[2], box[3]), (0, 255, 0))
+            # cv2.rectangle(cv_im, (im_rois[j, 0], im_rois[j, 1]), (im_rois[j, 2], im_rois[j, 3]), (0, 0, 255))
+            
+            # cv2.imshow('test', cv_im)
+            # raw_input('Press enter to continue')
 
-        blobs = {'data': None, 'rois': None}
-        blobs['data'], blobs['rois'] = _get_blobs(im, im_rois[:, 0:4].astype(np.float32, copy=True))
+    net.blobs['data'].reshape(*(blobs['data'].shape))
+    net.blobs['rois'].reshape(*(blobs['rois'].shape))
+    blobs_out = net.forward(data=blobs['data'].astype(np.float32, copy=False),
+                            rois=blobs['rois'].astype(np.float32, copy=False))['bbox_reg']
 
-        net.blobs['data'].reshape(*(blobs['data'].shape))
-        net.blobs['rois'].reshape(*(blobs['rois'].shape))
-        blobs_out = net.forward(data=blobs['data'].astype(np.float32, copy=False),
-                                rois=blobs['rois'].astype(np.float32, copy=False))['bbox_reg']
+    im_rois = _enlarge_boxes(boxes, im.shape[1], im.shape[0])
+    im_width = im_rois[:, 2:3] - im_rois[:, 0:1]
+    im_height = im_rois[:, 3:4] - im_rois[:, 1:2]
 
-        im_width = im_rois[:, 2:3] - im_rois[:, 0:1]
-        im_height = im_rois[:, 3:4] - im_rois[:, 1:2]
+    im_x = im_width * blobs_out[:, 0:1]
+    im_y = im_height * blobs_out[:, 1:2]
 
-        im_x = im_width * blobs_out[:, 0:1]
-        im_y = im_height * blobs_out[:, 1:2]
+    im_x1 = im_x - im_width * blobs_out[:, 2:3] / 2 + im_rois[:, 0:1]
+    im_y1 = im_y - im_height * blobs_out[:, 3:4] / 2 + im_rois[:, 1:2]
+    im_x2 = im_x + im_width * blobs_out[:, 2:3] / 2 + im_rois[:, 0:1]
+    im_y2 = im_y + im_height * blobs_out[:, 3:4] / 2 + im_rois[:, 1:2]
 
-        im_x1 = im_x - im_width * blobs_out[:, 2:3] / 2 + im_rois[:, 0:1]
-        im_y1 = im_y - im_height * blobs_out[:, 3:4] / 2 + im_rois[:, 1:2]
-        im_x2 = im_x + im_width * blobs_out[:, 2:3] / 2 + im_rois[:, 0:1]
-        im_y2 = im_y + im_height * blobs_out[:, 3:4] / 2 + im_rois[:, 1:2]
-
-        im_boxes = np.hstack((im_x1, im_y1, im_x2, im_y2)).astype(np.float32)
-        pred_bbox[i * batch_size:min((i + 1) * batch_size, boxes.shape[0]), 0:4] = im_boxes
-        pred_bbox[i * batch_size:min((i + 1) * batch_size, boxes.shape[0]), 4] = \
-            boxes[i * batch_size:min((i + 1) * batch_size, boxes.shape[0]), 4]
+    im_boxes = np.hstack((im_x1, im_y1, im_x2, im_y2)).astype(np.float32)
+    pred_bbox[:, 0:4] = im_boxes
+    pred_bbox[:, 4] = boxes[:, 4]
 
     return pred_bbox
 

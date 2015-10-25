@@ -74,21 +74,27 @@ def get_minibatch_bbox(roidb):
     random_scale_inds = npr.randint(0, high=len(cfg.TRAIN.SCALES),
         size=num_images)
 
+    assert(cfg.TRAIN.BATCH_SIZE % num_images == 0), \
+        'num_images ({}) must divide BATCH_SIZE ({})'. \
+        format(num_images, cfg.TRAIN.BATCH_SIZE)
+
+    rois_per_image = cfg.TRAIN.BATCH_SIZE / num_images
     rois_blob = np.zeros((0, 5), dtype=np.float32)
     labels_blob = np.zeros((0, 4), dtype=np.float32)
 
-    img_ind = 0
-    processed_ims = []
-    for i in range(num_images):
-        images, im_rois, labels = _sample_rois_bbox(roidb[i])
+    im_blob, im_scales = _get_image_blob(roidb, random_scale_inds)
+    rois_blob = np.zeros((0, 5), dtype=np.float32)
+    labels_blob = np.zeros((0, 4), dtype=np.float32)
 
-        target_size = cfg.TRAIN.SCALES[random_scale_inds[i]]
-        for j in range(len(images)):
-            im, im_scale = prep_im_for_blob(images[j], cfg.PIXEL_MEANS, target_size,
-                                            cfg.TRAIN.MAX_SIZE)
-            processed_ims.append(im)
-            rois = _project_im_rois(im_rois[j], im_scale)
+    for im_ind in range(num_images):
+        labels, im_rois = _sample_rois_bbox(roidb[im_ind], rois_per_image)
 
+        rois = _project_im_rois(im_rois, im_scales[im_ind])
+        batch_ind = im_ind * np.ones((rois.shape[0], 1))
+        rois_blob_this_image = np.hstack((batch_ind, rois))
+        rois_blob = np.vstack((rois_blob, rois_blob_this_image))
+
+        labels_blob = np.vstack((labels_blob, labels))
             # cv_im = im.copy()
             # cv2.rectangle(cv_im, (int(rois[0, 0]), int(rois[0, 1])), (int(rois[0, 2]), int(rois[0, 3])), (0, 255, 0))
 
@@ -108,52 +114,42 @@ def get_minibatch_bbox(roidb):
             # print labels[j]
             # raw_input('Press Enter to Continue')
 
-            rois_blob_this_image = np.zeros((1, 5), dtype=np.float32)
-            rois_blob_this_image[0, 0] = img_ind
-            rois_blob_this_image[0, 1:5] = rois
-            rois_blob = np.vstack((rois_blob, rois_blob_this_image))
-            labels_blob = np.vstack((labels_blob, labels[j]))
-
-            img_ind += 1
-
-    im_blob = im_list_to_blob(processed_ims)
-
     blobs = {'data': im_blob,
              'rois': rois_blob,
              'labels': labels_blob}
 
     return blobs
 
-def _sample_rois_bbox(roi, ov_threshold=0.6):
-    images = []
-    im_rois = []
-    labels = []
-
-    roi_img = cv2.imread(roi['image'])
-    if roi['flipped']:
-        roi_img = roi_img[:, ::-1, :]
-
+def _sample_rois_bbox(roi, rois_per_image, ov_threshold=0.6):
     gt_inds = np.where(roi['gt_classes'])[0]
-    overlaps = bbox_overlaps(roi['boxes'].astype(np.float), roi['boxes'][gt_inds, :].astype(np.float))
+    overlaps = bbox_overlaps(roi['boxes'].astype(np.float), 
+                    roi['boxes'][gt_inds, :].astype(np.float))
 
+    roi_im = cv2.imread(roi['image'])
+    im_rois = np.zeros((0, 4), dtype=np.float32)
+    labels = np.zeros((0, 4), dtype=np.float32)
     for k in range(overlaps.shape[1]):
         gt_box = roi['boxes'][gt_inds[k], :]
         overlap = overlaps[:, k]
         ov_inds = np.where(overlap >= ov_threshold)[0]
 
-        e_boxes = _enlarge_boxes(roi['boxes'][ov_inds, :], roi_img.shape[1], roi_img.shape[0])
-        e_labels = _sample_label(e_boxes, gt_box)
-        for j in range(e_boxes.shape[0]):
-            e_box = e_boxes[j, :]
-            images.append(roi_img[e_box[1]:e_box[3], e_box[0]:e_box[2], :])
-            im_rois.append(np.array([[0, 0, images[-1].shape[1] - 1, images[-1].shape[0] - 1]]))
-            labels.append(e_labels[j:j + 1, :])
+        im_roi = _enlarge_boxes(roi['boxes'][ov_inds, :], 
+                    roi_im.shape[1], roi_im.shape[0])
+        label = _sample_label(im_roi, gt_box)
 
-    r_inds = random.sample(range(len(images)), min(len(images), cfg.TRAIN.BATCH_SIZE))
-    images = [images[i] for i in r_inds]
-    im_rois = [im_rois[i] for i in r_inds]
-    labels = [labels[i] for i in r_inds]
-    return images, im_rois, labels
+        im_rois = np.vstack((im_rois, im_roi))
+        labels = np.vstack((labels, label))
+
+    rois_inds = npr.permutation(im_rois.shape[0])
+    if rois_per_image < im_rois.shape[0]:
+        rois_inds = rois_inds[0:rois_per_image]
+
+    print labels.shape
+    print rois_inds
+    labels = labels[rois_inds]
+    im_rois = im_rois[rois_inds]
+
+    return labels, im_rois
 
 def _sample_label(boxes, gt_box):
     w = (boxes[:, 2] - boxes[:, 0] + 1)[:, np.newaxis]

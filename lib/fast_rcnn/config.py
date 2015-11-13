@@ -31,9 +31,10 @@ cfg = __C
 # Training options
 #
 
-__C.TRAIN_BBOX = True
 __C.TRAIN = edict()
 
+__C.TRAIN.EXTRA_WIDTH = 1.25
+__C.TRAIN.EXTRA_HEIGHT = 1.25
 # Scales to use during training (can list multiple scales)
 # Each scale is the pixel size of an image's shortest side
 __C.TRAIN.SCALES = (600,)

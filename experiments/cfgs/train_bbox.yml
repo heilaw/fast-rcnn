@@ -1,9 +1,11 @@
 EXP_DIR: "train_bbox"
-TRAIN_BBOX: True
 TRAIN:
   IMS_PER_BATCH: 2
   BATCH_SIZE: 30
   BBOX_REG: False
   SNAPSHOT_INFIX: train_bbox
+  BBOX_THRESH: 0.6
+  EXTRA_WIDTH: 1.2
+  EXTRA_HEIGHT: 1.2
 TEST:
   BBOX_REG: False

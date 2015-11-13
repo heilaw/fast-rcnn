@@ -1,26 +1,12 @@
 from fast_rcnn.config import cfg, get_output_dir
 from utils.blob import im_list_to_blob
 from utils.timer import Timer
+from utils.rois import enlarge_rois
 
 import cv2
 import os.path
 import numpy as np
 import cPickle
-
-def _enlarge_boxes(boxes, im_width, im_height):
-    w = (boxes[:, 2] - boxes[:, 0] + 1)[:, np.newaxis]
-    h = (boxes[:, 3] - boxes[:, 1] + 1)[:, np.newaxis]
-    r = (w + h) / 4
-
-    x_c = np.floor((boxes[:, 2] + boxes[:, 0]) / 2)[:, np.newaxis]
-    y_c = np.floor((boxes[:, 3] + boxes[:, 1]) / 2)[:, np.newaxis]
-
-    e_boxes = np.hstack((np.maximum(x_c - w / 2 - r, 1),
-        np.maximum(y_c - h / 2 - r, 1),
-        np.minimum(x_c + w / 2 + r, im_width),
-        np.minimum(y_c + h / 2 + r, im_height)))
-    
-    return e_boxes
 
 def _get_image_blob(im):
     im_orig = im.astype(np.float32, copy=True)
@@ -54,7 +40,7 @@ def _get_blobs(im, rois):
     blobs = {'data': None, 'rois': None}
     blobs['data'], im_scale_factors = _get_image_blob(im)
     
-    im_rois = _enlarge_boxes(rois, im.shape[1], im.shape[0])
+    im_rois = enlarge_rois(rois, im.shape[1], im.shape[0])
     blobs['rois'] = _get_rois_blob(im_rois, im_scale_factors)
 
     return blobs, im_scale_factors
@@ -99,20 +85,34 @@ def bbox_detect(net, im, boxes):
     blobs_out = net.forward(data=blobs['data'].astype(np.float32, copy=False),
                             rois=blobs['rois'].astype(np.float32, copy=False))['bbox_reg']
 
-    im_rois = _enlarge_boxes(boxes, im.shape[1], im.shape[0])
-    im_width = im_rois[:, 2:3] - im_rois[:, 0:1]
-    im_height = im_rois[:, 3:4] - im_rois[:, 1:2]
+    im_rois = enlarge_rois(boxes, im.shape[1], im.shape[0])
 
-    im_x = im_width * blobs_out[:, 0:1]
-    im_y = im_height * blobs_out[:, 1:2]
+    widths = im_rois[:, 2:3] - im_rois[:, 0:1] + cfg.EPS
+    heights = im_rois[:, 3:4] - im_rois[:, 1:2] + cfg.EPS
+    ctr_x = im_rois[:, 0:1] + 0.5 * widths
+    ctr_y = im_rois[:, 1:2] + 0.5 * heights
 
-    im_x1 = im_x - im_width * blobs_out[:, 2:3] / 2 + im_rois[:, 0:1]
-    im_y1 = im_y - im_height * blobs_out[:, 3:4] / 2 + im_rois[:, 1:2]
-    im_x2 = im_x + im_width * blobs_out[:, 2:3] / 2 + im_rois[:, 0:1]
-    im_y2 = im_y + im_height * blobs_out[:, 3:4] / 2 + im_rois[:, 1:2]
+    dx = blobs_out[:, 0:1]
+    dy = blobs_out[:, 1:2]
+    dw = blobs_out[:, 2:3]
+    dh = blobs_out[:, 3:4]
 
-    im_boxes = np.hstack((im_x1, im_y1, im_x2, im_y2)).astype(np.float32)
-    pred_bbox[:, 0:4] = im_boxes
+    # pred_ctr_x = dx * widths + ctr_x
+    # pred_ctr_y = dy * heights + ctr_y
+    pred_ctr_x = dx * widths + im_rois[:, 0:1]
+    pred_ctr_y = dy * heights + im_rois[:, 1:2]
+    # pred_w = np.exp(dw) * widths
+    # pred_h = np.exp(dh) * heights
+    pred_w = np.log(dw) * widths
+    pred_h = np.log(dh) * heights
+
+    pred_x1 = pred_ctr_x - 0.5 * pred_w
+    pred_y1 = pred_ctr_y - 0.5 * pred_h
+    pred_x2 = pred_ctr_x + 0.5 * pred_w
+    pred_y2 = pred_ctr_y + 0.5 * pred_h
+
+    pred_bbox[:, 0:4] = \
+        np.hstack((pred_x1, pred_y1, pred_x2, pred_y2)).astype(np.float32)
     pred_bbox[:, 4] = boxes[:, 4]
 
     return pred_bbox
@@ -156,6 +156,6 @@ def test_net(net, imdb):
         print 'bbox_detect: {:d}/{:d} {:.3f}s' \
             .format(i + 1, num_images, _t['bbox_detect'].average_time)
 
-    det_file = './output/no_bbox_reg/voc_2007_test/caffenet_fast_rcnn_iter_40000/detections_bbox.pkl'
+    det_file = './output/no_bbox_reg/voc_2007_test/caffenet_fast_rcnn_iter_40000/detections_bbox_exp_hei.pkl'
     with open(det_file, 'wb') as f:
         cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)

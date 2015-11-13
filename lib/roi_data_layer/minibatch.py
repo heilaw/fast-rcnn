@@ -17,6 +17,7 @@ import cv2
 from fast_rcnn.config import cfg
 from utils.blob import prep_im_for_blob, im_list_to_blob
 from utils.cython_bbox import bbox_overlaps
+from utils.rois import enlarge_rois
 
 def get_minibatch(roidb, num_classes):
     """Given a roidb, construct a minibatch sampled from it."""
@@ -133,8 +134,13 @@ def _sample_rois_bbox(roi, rois_per_image, ov_threshold=0.6):
         overlap = overlaps[:, k]
         ov_inds = np.where(overlap >= ov_threshold)[0]
 
-        im_roi = _enlarge_boxes(roi['boxes'][ov_inds, :], 
+        im_roi = enlarge_rois(roi['boxes'][ov_inds, :], 
                     roi_im.shape[1], roi_im.shape[0])
+        temp = np.ascontiguousarray(im_roi).view(np.dtype((np.void,
+            im_roi.dtype.itemsize * im_roi.shape[1])))
+        _, idx = np.unique(temp, return_index=True)
+
+        im_roi = im_roi[idx]
         label = _sample_label(im_roi, gt_box)
 
         im_rois = np.vstack((im_rois, im_roi))
@@ -144,8 +150,6 @@ def _sample_rois_bbox(roi, rois_per_image, ov_threshold=0.6):
     if rois_per_image < im_rois.shape[0]:
         rois_inds = rois_inds[0:rois_per_image]
 
-    print labels.shape
-    print rois_inds
     labels = labels[rois_inds]
     im_rois = im_rois[rois_inds]
 
@@ -160,29 +164,8 @@ def _sample_label(boxes, gt_box):
     x_gt = np.floor((gt_box[0] + w_gt / 2 - boxes[:, 0])[:, np.newaxis])
     y_gt = np.floor((gt_box[1] + h_gt / 2 - boxes[:, 1])[:, np.newaxis])
 
-    sub_label = np.hstack((x_gt / w, y_gt / h, w_gt / w, h_gt / h))
+    sub_label = np.hstack((x_gt / w, y_gt / h, np.log(w_gt / w), np.log(h_gt / h)))
     return sub_label
-
-def _enlarge_boxes(boxes, im_width, im_height):
-    w = (boxes[:, 2] - boxes[:, 0] + 1)[:, np.newaxis]
-    h = (boxes[:, 3] - boxes[:, 1] + 1)[:, np.newaxis]
-    # r = (w + h) / 4
-    w = 1.25 * w
-    h = 1.25 * h
-
-    x_c = np.floor((boxes[:, 2] + boxes[:, 0]) / 2)[:, np.newaxis]
-    y_c = np.floor((boxes[:, 3] + boxes[:, 1]) / 2)[:, np.newaxis]
-
-    # e_boxes = np.hstack((np.maximum(x_c - w / 2 - r, 1),
-        # np.maximum(y_c - h / 2 - r, 1),
-        # np.minimum(x_c + w / 2 + r, im_width),
-        # np.minimum(y_c + h / 2 + r, im_height)))
-    e_boxes = np.hstack((np.maximum(x_c - w / 2, 0),
-        np.maximum(y_c - h / 2, 0),
-        np.minimum(x_c + w / 2, im_width),
-        np.minimum(y_c + h / 2, im_height)))
-    
-    return e_boxes
 
 def _sample_rois(roidb, fg_rois_per_image, rois_per_image, num_classes):
     """Generate a random sample of RoIs comprising foreground and background
